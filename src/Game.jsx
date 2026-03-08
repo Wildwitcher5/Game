@@ -22,7 +22,13 @@ const CR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAEsCAYAAACG+vy+AA
 /*    public/assets/cards/revive.jpg                                           */
 /*    public/assets/cards/poison.jpg                                           */
 const BG        = "/assets/bg.jpg";
-const COMBO_ART = "/assets/combo.jpg";
+const COMBO_ART = "/assets/Combo.jpeg";
+const COMBO_ARTS = {
+  "Ядовитый огонь 🔥☠️": "/assets/piosonrage.jpeg",
+  "Засада 🪤⚔️": "/assets/ambush.jpeg",
+  "Крепость 🛡️💉": "/assets/fortress.jpeg",
+};
+const getComboArt = n => COMBO_ARTS[n] ?? COMBO_ART;
 const ART = {
   attack:   "/assets/cards/attack.jpg",
   rage:     "/assets/cards/rage.jpg",
@@ -32,7 +38,7 @@ const ART = {
   double:   "/assets/cards/double.jpg",
   spy:      "/assets/cards/spy.jpg",
   counter:  "/assets/cards/counter.jpg",
-  healAlex: "/assets/cards/healAlex.jpg",
+  healAlex: "/assets/cards/heal.jpeg",
   energy:   "/assets/cards/energy.jpg",
   revive:   "/assets/cards/revive.jpg",
   poison:   "/assets/cards/poison.jpg",
@@ -157,7 +163,7 @@ function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,dead,shake,reviving,c
 function GameCard({card,selected,dimmed,jointPending,comboWith,onPreview,small=false}){
   const def=CARDS[card.type];
   const isJP=jointPending;
-  const W=small?100:130;
+  const W=small?100:148;
   const H=W*1.5;
   // Measured pixel-exact from frame PNG (400x600 source)
   const artL=W*0.225, artT=H*0.14,  artW=W*0.575, artH=H*0.41;
@@ -307,47 +313,54 @@ function CardPreview({card,gs,onApply,onTarget,onClose,isP,odLeft,alreadySel}){
   );
 }
 
-/* Enemy card animation overlay */
+/* Enemy card animation overlay — shows one enemy at a time */
 function EnemyCardShow({enemyCard}){
   const {e1,e2}=enemyCard;
-  if(!e1&&!e2)return null;
-  const showCard=(key,type)=>{
-    if(!type)return null;
-    const def=CARDS[type]||{e:"⚔️",n:type,c:"#e05252"};
-    const W=110, H=165;
-    const artL=W*0.225, artT=H*0.14, artW=W*0.575, artH=H*0.41;
-    const titleL=W*0.11, titleT=H*0.087, titleW=W*0.772, titleH=H*0.055;
-    const pL=W*0.19, pT=H*0.633, pW=W*0.615, pH=H*0.183;
-    return(
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-        <div style={{fontSize:10,color:"#e05252",fontFamily:"Georgia,serif",marginBottom:2,letterSpacing:1}}>
-          {key==="e1"?"СТРАЖ":"ТЕНЬ"}</div>
-        <div style={{position:"relative",width:W,height:H,animation:"enemyCardIn 0.5s cubic-bezier(.2,1,.3,1)",
-          filter:`drop-shadow(0 0 16px ${def.c}88)`}}>
+  const actor=e1?"e1":e2?"e2":null;
+  const type=actor?enemyCard[actor]:null;
+  if(!actor||!type)return null;
+  const def=CARDS[type]||{e:"⚔️",n:type,c:"#e05252",d:""};
+  const isE1=actor==="e1";
+  const color=isE1?"#e05252":"#a03070";
+  const W=155,H=W*1.5;
+  const artL=W*0.225,artT=H*0.14,artW=W*0.575,artH=H*0.41;
+  const titleL=W*0.11,titleT=H*0.087,titleW=W*0.772,titleH=H*0.055;
+  const pL=W*0.19,pT=H*0.633,pW=W*0.615,pH=H*0.183;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:55,display:"flex",alignItems:"center",
+      justifyContent:"center",pointerEvents:"none",
+      background:"rgba(0,0,0,0.55)",animation:"fadeIn 0.2s"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+        animation:"enemyActIn 0.45s cubic-bezier(.15,1.1,.3,1)"}}>
+        <div style={{fontSize:16,fontWeight:900,letterSpacing:4,color,fontFamily:"Georgia,serif",
+          textShadow:`0 0 28px ${color}dd,0 2px 10px rgba(0,0,0,0.95)`}}>
+          {isE1?"⚔ СТРАЖ ДЕЙСТВУЕТ":"🌑 ТЕНЬ ДЕЙСТВУЕТ"}
+        </div>
+        <div style={{position:"relative",width:W,height:H,
+          filter:`drop-shadow(0 0 30px ${def.c}bb)drop-shadow(0 0 12px rgba(0,0,0,0.95))`}}>
           <div style={{position:"absolute",left:artL,top:artT,width:artW,height:artH,overflow:"hidden",zIndex:1}}>
             {ART[type]?<img src={ART[type]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:28,background:"rgba(10,8,5,0.9)"}}>{def.e}</div>}
+              :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                justifyContent:"center",fontSize:44,background:"rgba(10,8,5,0.9)"}}>{def.e}</div>}
           </div>
           <div style={{position:"absolute",left:titleL,top:titleT,width:titleW,height:titleH,zIndex:3,
             display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:7,fontWeight:700,color:"#e8d090",fontFamily:"Georgia,serif",
+            <span style={{fontSize:9,fontWeight:700,color:"#e8d090",fontFamily:"Georgia,serif",
               letterSpacing:0.5,textShadow:"0 1px 3px #000"}}>{def.n}</span>
           </div>
           <div style={{position:"absolute",left:pL,top:pT,width:pW,height:pH,zIndex:3,
             display:"flex",alignItems:"center",justifyContent:"center",padding:"2px 3px",textAlign:"center"}}>
-            <span style={{fontSize:7,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.3}}>{def.d}</span>
+            <span style={{fontSize:8,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.3}}>{def.d}</span>
           </div>
-          <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
+          <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",
+            objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
+        </div>
+        <div style={{fontSize:12,color:"#c8b080",fontFamily:"Georgia,serif",letterSpacing:1,
+          background:"rgba(0,0,0,0.7)",padding:"5px 14px",borderRadius:6,
+          border:`1px solid ${color}44`,textShadow:"0 1px 4px rgba(0,0,0,0.9)"}}>
+          {def.e} {def.n} — {def.d}
         </div>
       </div>
-    );
-  };
-  return(
-    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
-      zIndex:55,display:"flex",gap:24,pointerEvents:"none"}}>
-      {showCard("e1",e1)}
-      {e2!==e1&&showCard("e2",e2)}
     </div>
   );
 }
@@ -473,7 +486,8 @@ export default function App(){
     e1:["attack","attack","rage","shield","double","trap","poison"],
     e2:["attack","poison","poison","counter","healMe","joint_e","shield"],
   };
-  const enemyAct=(g,logs,t,setEnemyCard)=>{
+  const enemyAct=(g,logs,t)=>{
+    let e1Card=null,e2Card=null;
     let ng={you:{...g.you},alex:{...g.alex},e1:{...g.e1},e2:{...g.e2}};
     const hits={};
     const hit=(k,d)=>{hits[k]=(hits[k]??0)+d;};
@@ -482,7 +496,7 @@ export default function App(){
     const doCombo=bothAlive&&t>3&&rnd(4)===0;
     if(doCombo){
       const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";
-      setEnemyCard&&setEnemyCard({e1:"joint",e2:"joint"});
+      e1Card="joint";e2Card="joint";
       const d=22;
       let finalD=d;
       if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);finalD=0;}
@@ -492,7 +506,7 @@ export default function App(){
       if(ng.e1.hp>0){
         const pool=ENEMY_CARDS.e1;
         const card=pool[rnd(pool.length)];
-        setEnemyCard&&setEnemyCard(p=>({...p,e1:card}));
+        e1Card=card;
         const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";
         if(card==="shield"){ng.e1={...ng.e1,hp:cl(ng.e1.hp+10,0,ng.e1.maxHp)};logs.push(`Страж 🛡️: +10HP`);}
         else if(card==="trap"){ng.e1={...ng.e1,trap:true};logs.push("Страж 🪤: Ловушка!");}
@@ -509,7 +523,7 @@ export default function App(){
       if(ng.e2.hp>0){
         const pool=ENEMY_CARDS.e2;
         const card=pool[rnd(pool.length)];
-        setEnemyCard&&setEnemyCard(p=>({...p,e2:card}));
+        e2Card=card;
         const tgt=rnd(2)===0?"you":"alex";
         if(card==="shield"){ng.e2={...ng.e2,hp:cl(ng.e2.hp+10,0,ng.e2.maxHp)};logs.push(`Тень 🛡️: +10HP`);}
         else if(card==="healMe"){ng.e1.hp>0&&(ng.e1={...ng.e1,hp:cl(ng.e1.hp+12,0,ng.e1.maxHp)});logs.push("Тень 💉→Стражу: +12HP");}
@@ -531,7 +545,7 @@ export default function App(){
     for(const k of["you","alex","e1","e2"]){
       if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-4,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −4HP`);hit(k,4);}
     }
-    return{ng,hits};
+    return{ng,hits,e1Card,e2Card};
   };
 
   /* ── Skip ───────────────────────────────────────────────────────────── */
@@ -548,7 +562,7 @@ export default function App(){
       else if(a.type==="shield"){g.alex={...g.alex,hp:cl(g.alex.hp+8,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +8HP");}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +10HP");}
     }
-    const{ng,hits:eh}=enemyAct(g,logs,turn,setEnemyCard);setTimeout(()=>setEnemyCard({e1:null,e2:null}),2200);g=ng;
+    const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
     if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
@@ -569,7 +583,7 @@ export default function App(){
       const tgts=played.filter(p=>CARDS[p.card.type].t==="enemy");
       const ct=tgts.length>0?tgts[0].target:["e1","e2"].find(k=>g[k].hp>0);
       cr=combo.bonus(g,ct);logs.push(combo.msg);
-      setComboGlow(combo.name);setTimeout(()=>setComboGlow(null),1500);
+      setComboGlow(combo.name);setTimeout(()=>setComboGlow(null),2400);
     }
     for(const{card,target}of played){
       switch(card.type){
@@ -605,7 +619,7 @@ export default function App(){
       else if(a.type==="shield"){g.alex={...g.alex,hp:cl(g.alex.hp+8,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +8HP");}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +10HP");}
     }
-    const{ng,hits:eh}=enemyAct(g,logs,turn,setEnemyCard);setTimeout(()=>setEnemyCard({e1:null,e2:null}),2200);g=ng;
+    const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
     setOd(cl(1+nob,1,3));setOdBank(0);
@@ -670,20 +684,19 @@ export default function App(){
 
       {/* Combo flash */}
       {comboGlow&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:58,
+        <div style={{position:"fixed",inset:0,zIndex:58,
           display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",
-          animation:"fadeIn 0.2s"}}>
-          <div style={{position:"relative",animation:"comboFlash 0.4s cubic-bezier(.2,1,.3,1)"}}>
-            <img src={COMBO_ART} alt="" style={{width:280,height:180,objectFit:"cover",borderRadius:12,
-              border:"3px solid #e09a3c",boxShadow:"0 0 60px rgba(224,154,60,0.9)"}}/>
-            <div style={{position:"absolute",bottom:0,left:0,right:0,
-              background:"linear-gradient(transparent,rgba(0,0,0,0.9))",
-              borderRadius:"0 0 10px 10px",padding:"20px 16px 10px",
-              fontSize:16,fontWeight:900,color:"#e09a3c",
-              fontFamily:"Georgia,serif",letterSpacing:2,textAlign:"center",
-              textShadow:"0 0 20px rgba(224,154,60,0.8)"}}>
-              ⚡ {comboGlow}
-            </div>
+          background:"rgba(0,0,0,0.65)",animation:"fadeIn 0.15s"}}>
+          <div style={{position:"relative",animation:"comboFlash 0.7s cubic-bezier(.15,1.2,.3,1)"}}>
+            <img src={getComboArt(comboGlow)} alt="" style={{width:500,height:330,objectFit:"cover",
+              borderRadius:16,border:"3px solid #e09a3c",
+              boxShadow:"0 0 100px rgba(224,154,60,1),0 0 200px rgba(200,80,0,0.5)"}}/>
+            <div style={{position:"absolute",inset:0,borderRadius:16,
+              background:"linear-gradient(160deg,rgba(255,220,0,0.06),rgba(0,0,0,0.55))"}}/>
+            <div style={{position:"absolute",top:"50%",left:"50%",
+              transform:"translate(-50%,-50%)",
+              fontSize:72,filter:"drop-shadow(0 0 40px rgba(255,210,0,1))",
+              animation:"pulse 0.35s infinite"}}>⚡</div>
           </div>
         </div>)}
 
@@ -721,7 +734,7 @@ export default function App(){
           </div>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"230px 1fr 280px",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"265px 1fr 280px",gap:12}}>
           
           {/* LEFT — units */}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -732,6 +745,15 @@ export default function App(){
             <div style={{fontSize:10,letterSpacing:2,color:"#1a3040",fontFamily:"Georgia,serif"}}>СОЮЗНИКИ</div>
             <UnitCard name="Алекс" sub="напарник (1ОД)" hp={gs.alex.hp} maxHp={MHP.alex} bar="#4caf82" ring="#4caf82" flash={flash.alex} poison={gs.alex.poison} dead={gs.alex.hp<=0} shake={shaking==="alex"} reviving={reviveAnim}/>
             <UnitCard name="Ты" hp={gs.you.hp} maxHp={MHP.you} bar="#4c7fe0" ring="#4c7fe0" flash={flash.you} poison={gs.you.poison} dead={gs.you.hp<=0} shake={shaking==="you"}/>
+            <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
+              borderRadius:8,padding:"8px 10px",marginTop:4}}>
+              <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
+              <div style={{maxHeight:150,overflowY:"auto"}}>
+                {log.length===0?<div style={{fontSize:10,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
+                  :log.map((l,i)=><LogLine key={i} text={l}/>)}
+                <div ref={logEnd}/>
+              </div>
+            </div>
             {jointCard&&(
               <div style={{padding:"12px",background:"rgba(200,154,60,0.08)",border:"1.5px solid rgba(200,154,60,0.35)",borderRadius:10,animation:"fadeIn 0.2s"}}>
                 <div style={{fontSize:11,color:"#e09a3c",fontFamily:"Georgia,serif",marginBottom:4}}>
@@ -752,15 +774,6 @@ export default function App(){
               border:"1.5px solid rgba(200,154,60,0.45)",borderRadius:8,
               animation:"comboPulse 0.8s infinite",fontSize:12,color:"#e09a3c",
               fontFamily:"Georgia,serif",fontWeight:700}}>⚡ КОМБО: {combo.name}</div>}
-
-            <div style={{background:"rgba(0,0,0,0.6)",border:"1px solid rgba(200,160,80,0.15)",borderRadius:10,padding:12}}>
-              <div style={{fontSize:10,letterSpacing:2,color:"#4a3010",marginBottom:8,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:110,overflowY:"auto"}}>
-                {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
-                  :log.map((l,i)=><LogLine key={i} text={l}/>)}
-                <div ref={logEnd}/>
-              </div>
-            </div>
 
             <div style={{background:"rgba(0,0,0,0.55)",border:"1px solid rgba(200,160,80,0.15)",borderRadius:10,padding:14,flex:1}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -792,7 +805,7 @@ export default function App(){
                   })}
                 </div>)}
               <div style={{fontSize:10,color:"#3a2808",marginBottom:10,fontFamily:"Georgia,serif"}}>
-                💡 Нажми карту → выбери действие · Комбо: 🔥+☠️ | ⚔️+⚔️ | ⚔️+⚔️⚔️ | 🛡️+💉 | 🪤+⚔️ | ⚡+🔥
+                💡 Нажми карту чтобы выбрать действие и цель
               </div>
               <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
                 {hand.map(card=>{

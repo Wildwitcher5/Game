@@ -56,9 +56,16 @@ button:not(:disabled):hover {
 }
 
 @keyframes comboFlash {
-  0%   { opacity: 0; transform: scale(0.5); }
-  40%  { opacity: 1; transform: scale(1.15); }
-  100% { opacity: 1; transform: scale(1); }
+  0%   { opacity: 0; transform: scale(0.3) rotate(-4deg); }
+  45%  { opacity: 1; transform: scale(1.08) rotate(1.5deg); }
+  70%  { transform: scale(0.97) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes enemyActIn {
+  0%   { opacity: 0; transform: scale(0.5) translateY(-30px); }
+  60%  { transform: scale(1.07) translateY(6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 @keyframes reviveGlow {
