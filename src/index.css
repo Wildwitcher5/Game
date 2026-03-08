@@ -1,0 +1,84 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #080604;
+}
+
+button:not(:disabled):hover {
+  filter: brightness(1.2);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dmgFloat {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-36px); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-6px); }
+  75%       { transform: translateX(6px); }
+}
+
+@keyframes comboPulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.04); }
+}
+
+@keyframes enemyCardIn {
+  0%   { opacity: 0; transform: translateY(-40px) scale(0.7) rotate(-8deg); }
+  60%  { transform: translateY(4px) scale(1.05) rotate(1deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes comboFlash {
+  0%   { opacity: 0; transform: scale(0.5); }
+  40%  { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes reviveGlow {
+  0%   { box-shadow: 0 0 0 rgba(255, 215, 0, 0); }
+  50%  { box-shadow: 0 0 60px rgba(255, 215, 0, 0.8); }
+  100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes hitFlash {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(3) saturate(0); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes cardPlay {
+  0%   { opacity: 0; transform: translateY(30px) scale(0.8); }
+  100% { opacity: 1; transform: none; }
+}
