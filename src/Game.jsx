@@ -29,6 +29,7 @@ const COMBO_ARTS = {
   "Крепость 🛡️💉": "/assets/fortress.jpeg",
 };
 const getComboArt = n => COMBO_ARTS[n] ?? COMBO_ART;
+const CARD_BACK = "/assets/backcard.png";
 const ART = {
   attack:   "/assets/cards/attack.jpg",
   rage:     "/assets/cards/rage.jpg",
@@ -87,7 +88,7 @@ let _uid=0;
 const nuid=()=>String(++_uid);
 const rnd=n=>Math.floor(Math.random()*n);
 const pickCard=()=>POOL[rnd(POOL.length)];
-const drawN=n=>Array.from({length:n},()=>({uid:nuid(),type:pickCard()}));
+const drawN=n=>Array.from({length:n},()=>({uid:nuid(),type:pickCard(),flipIn:true}));
 const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const en=k=>k==="e1"?"Страж":"Тень";
 
@@ -174,48 +175,61 @@ function GameCard({card,selected,dimmed,jointPending,comboWith,onPreview,small=f
   const glow=isJP?"#e09a3c":selected?def.c:null;
 
   return(
-    <div onClick={()=>{if(!dimmed||selected||isJP)onPreview(card);}}
-      style={{position:"relative",width:W,height:H,flexShrink:0,cursor:dimmed&&!selected&&!isJP?"default":"pointer",
-        opacity:dimmed&&!selected&&!isJP?0.22:1,
-        transform:selected?"translateY(-14px) scale(1.07)":isJP?"translateY(-7px) scale(1.02)":"none",
-        transition:"all 0.18s cubic-bezier(.4,0,.2,1)",
-        filter:glow?`drop-shadow(0 0 12px ${glow}aa)`:"none"}}>
-      
-      {comboWith&&<div style={{position:"absolute",top:-12,left:"50%",transform:"translateX(-50%)",
-        fontSize:8,background:"#e09a3c",color:"#000",borderRadius:3,padding:"2px 6px",
-        fontFamily:"Georgia,serif",fontWeight:700,whiteSpace:"nowrap",zIndex:10}}>КОМБО</div>}
+    <div style={{width:W,height:H,flexShrink:0,position:"relative",
+      animation:card.flipIn?"cardFrontIn 0.55s cubic-bezier(.4,0,.2,1) forwards":"cardPlay 0.25s both"}}>
 
-      {/* Art image — behind frame, clipped to art window area */}
-      <div style={{position:"absolute",left:artL,top:artT,width:artW,height:artH,overflow:"hidden",zIndex:1}}>
-        {ART[card.type]
-          ?<img src={ART[card.type]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-          :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:small?22:30,background:"rgba(10,8,5,0.9)"}}>{def.e}</div>}
+      {/* Card back — shown first during flip */}
+      {card.flipIn&&(
+        <div style={{position:"absolute",inset:0,zIndex:20,borderRadius:8,overflow:"hidden",
+          animation:"cardBackOut 0.55s cubic-bezier(.4,0,.2,1) forwards",pointerEvents:"none"}}>
+          <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+        </div>
+      )}
+
+      {/* Card front — selection/hover transforms live here */}
+      <div onClick={()=>{if(!dimmed||selected||isJP)onPreview(card);}}
+        style={{position:"absolute",inset:0,cursor:dimmed&&!selected&&!isJP?"default":"pointer",
+          opacity:dimmed&&!selected&&!isJP?0.22:1,
+          transform:selected?"translateY(-14px) scale(1.07)":isJP?"translateY(-7px) scale(1.02)":"none",
+          transition:"all 0.18s cubic-bezier(.4,0,.2,1)",
+          filter:glow?`drop-shadow(0 0 12px ${glow}aa)`:"none"}}>
+
+        {comboWith&&<div style={{position:"absolute",top:-12,left:"50%",transform:"translateX(-50%)",
+          fontSize:8,background:"#e09a3c",color:"#000",borderRadius:3,padding:"2px 6px",
+          fontFamily:"Georgia,serif",fontWeight:700,whiteSpace:"nowrap",zIndex:10}}>КОМБО</div>}
+
+        {/* Art image — behind frame, clipped to art window area */}
+        <div style={{position:"absolute",left:artL,top:artT,width:artW,height:artH,overflow:"hidden",zIndex:1}}>
+          {ART[card.type]
+            ?<img src={ART[card.type]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:small?22:30,background:"rgba(10,8,5,0.9)"}}>{def.e}</div>}
+        </div>
+
+        {/* Title */}
+        <div style={{position:"absolute",left:titleL,top:titleT,width:titleW,height:titleH,zIndex:3,
+          display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+          <span style={{fontSize:small?7:9,fontWeight:700,color:"#e8d090",fontFamily:"Georgia,serif",
+            letterSpacing:0.5,textShadow:"0 1px 3px rgba(0,0,0,0.9)",whiteSpace:"nowrap",
+            maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {def.n.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Parchment text — pinned to exact parchment area */}
+        <div style={{position:"absolute",left:pL,top:pT,width:pW,height:pH,zIndex:3,
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          padding:"2px 4px",textAlign:"center",overflow:"hidden"}}>
+          <div style={{fontSize:small?7:9,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.35,
+            wordBreak:"break-word"}}>{def.d}</div>
+          {def.od===2&&<div style={{fontSize:small?6:8,color:"#a06010",marginTop:2,fontFamily:"Georgia,serif"}}>2 ОД</div>}
+          {isJP&&<div style={{fontSize:7,color:"#e09a3c",marginTop:2,animation:"pulse 1s infinite",fontFamily:"Georgia,serif"}}>⏳</div>}
+        </div>
+
+        {/* Frame overlay — on top of everything */}
+        <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",
+          objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
       </div>
-
-      {/* Title */}
-      <div style={{position:"absolute",left:titleL,top:titleT,width:titleW,height:titleH,zIndex:3,
-        display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-        <span style={{fontSize:small?7:9,fontWeight:700,color:"#e8d090",fontFamily:"Georgia,serif",
-          letterSpacing:0.5,textShadow:"0 1px 3px rgba(0,0,0,0.9)",whiteSpace:"nowrap",
-          maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
-          {def.n.toUpperCase()}
-        </span>
-      </div>
-
-      {/* Parchment text — pinned to exact parchment area */}
-      <div style={{position:"absolute",left:pL,top:pT,width:pW,height:pH,zIndex:3,
-        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-        padding:"2px 4px",textAlign:"center",overflow:"hidden"}}>
-        <div style={{fontSize:small?7:9,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.35,
-          wordBreak:"break-word"}}>{def.d}</div>
-        {def.od===2&&<div style={{fontSize:small?6:8,color:"#a06010",marginTop:2,fontFamily:"Georgia,serif"}}>2 ОД</div>}
-        {isJP&&<div style={{fontSize:7,color:"#e09a3c",marginTop:2,animation:"pulse 1s infinite",fontFamily:"Georgia,serif"}}>⏳</div>}
-      </div>
-
-      {/* Frame overlay — on top of everything */}
-      <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",
-        objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
     </div>
   );
 }
@@ -393,7 +407,7 @@ function LogLine({text}){
 /* ── Main App ─────────────────────────────────────────────────────────────── */
 export default function App(){
   const [gs,setGs]=useState(initGs);
-  const [hand,setHand]=useState(()=>drawN(HAND_SIZE));
+  const [hand,setHand]=useState(()=>drawN(HAND_SIZE).map(c=>({...c,flipIn:false})));
   const [played,setPlayed]=useState([]);
   const [jointCard,setJC]=useState(null);
   const [jointReady,setJR]=useState(false);
@@ -604,9 +618,9 @@ export default function App(){
       else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doFlash(cr.tgt,cr.hp);logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
     }
     if(spyCard){
-      const ec=["attack","poison","rage","shield"];const nc={uid:nuid(),type:ec[rnd(ec.length)]};
-      setHand(h=>[...h.filter(c=>c.uid!==spyCard.uid),nc]);logs.push(`🔍 Шпионаж: скопировал карту врага`);
-    }else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)),...drawN(played.length)]);}
+      const ec=["attack","poison","rage","shield"];const nc={uid:nuid(),type:ec[rnd(ec.length)],flipIn:true};
+      setHand(h=>[...h.filter(c=>c.uid!==spyCard.uid),nc]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);logs.push(`🔍 Шпионаж: скопировал карту врага`);
+    }else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)),...drawN(played.length)]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
     setPlayed([]);setSpy(null);
     if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doFlash(jointTarget,d);logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
@@ -657,7 +671,7 @@ export default function App(){
     const r=await alexChatAPI(msg,gs);addChat("alex",r);setLoad(false);
   };
   const restart=()=>{
-    _uid=0;setGs(initGs());setHand(drawN(HAND_SIZE));setPlayed([]);setJC(null);setJR(false);
+    _uid=0;setGs(initGs());setHand(drawN(HAND_SIZE));setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setPlayed([]);setJC(null);setJR(false);
     setJointTarget(null);setSpy(null);setPhase("player");setWinner(null);setLog([]);
     setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(1);setOdBank(0);
     setLastMsg("");setComboGlow(null);setPreview(null);
