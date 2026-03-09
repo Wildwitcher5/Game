@@ -166,7 +166,7 @@ function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,bleed,dead,shake,revi
 //   Parchment:  y 63%-87%, x 20%-80%
 //   Target area: below card
 
-function GameCard({card,selected,dimmed,jointPending,comboWith,onPreview,small=false}){
+function GameCard({card,selected,dimmed,notEnoughOd,jointPending,comboWith,onPreview,small=false}){
   const def=CARDS[card.type];
   const isJP=jointPending;
   const W=small?100:148;
@@ -227,24 +227,101 @@ function GameCard({card,selected,dimmed,jointPending,comboWith,onPreview,small=f
           padding:"2px 4px",textAlign:"center",overflow:"hidden"}}>
           <div style={{fontSize:small?7:9,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.35,
             wordBreak:"break-word"}}>{def.d}</div>
-          {def.od===2&&<div style={{fontSize:small?6:8,color:"#a06010",marginTop:2,fontFamily:"Georgia,serif"}}>2 ОД</div>}
           {isJP&&<div style={{fontSize:7,color:"#e09a3c",marginTop:2,animation:"pulse 1s infinite",fontFamily:"Georgia,serif"}}>⏳</div>}
         </div>
 
         {/* Frame overlay — on top of everything */}
         <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",
           objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
+
+        {/* OD cost pips — bottom overlay */}
+        <div style={{position:"absolute",bottom:small?3:5,left:0,right:0,
+          display:"flex",justifyContent:"center",alignItems:"center",gap:2,zIndex:4}}>
+          <OdPips cost={def.od} canAfford={!notEnoughOd} small={small}/>
+        </div>
       </div>
     </div>
   );
 }
 
 /* ── Crystal pip ─────────────────────────────────────────────────────────── */
-function Crystal({active}){
+function Crystal({active,size=44}){
   return(
-    <div style={{width:44,height:44,opacity:active?1:0.2,transition:"opacity 0.3s",
+    <div style={{width:size,height:size,opacity:active?1:0.2,transition:"opacity 0.3s",
       filter:active?"drop-shadow(0 0 10px rgba(60,160,255,0.9))":"none"}}>
       <img src={CR} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+    </div>
+  );
+}
+
+/* ── OD cost pips on cards ─────────────────────────────────────────────────── */
+function OdPips({cost,canAfford,small=false}){
+  const sz=small?11:15;
+  return(
+    <div style={{display:"flex",gap:2,alignItems:"center",justifyContent:"center"}}>
+      {Array.from({length:cost},(_,i)=>(
+        <div key={i} style={{width:sz,height:sz,opacity:canAfford?1:0.25,
+          filter:canAfford?"drop-shadow(0 0 4px rgba(60,160,255,0.85))":"grayscale(1)",
+          transition:"all 0.2s"}}>
+          <img src={CR} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Visual deck stack ─────────────────────────────────────────────────────── */
+function DeckStack({count,fatigueCycle}){
+  const fpCard=fatigueCycle===1?0:fatigueCycle===2?3:fatigueCycle===3?6:10;
+  const layers=count>=12?5:count>=7?3:count>=3?2:count>=1?1:0;
+  const W=54,H=76;
+  const tip=`Осталось ${count} карт. Цикл: ${fatigueCycle}. Изнурение: ${fpCard} HP за карту`;
+  if(count===0)return(
+    <div title={tip} style={{width:W,height:H+22,display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",gap:4,flexShrink:0}}>
+      <div style={{width:W,height:H,border:"2px dashed rgba(200,160,80,0.15)",borderRadius:8,
+        display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span style={{fontSize:9,color:"#2a1808",fontFamily:"Georgia,serif"}}>—</span>
+      </div>
+      <div style={{fontSize:10,color:"#3a2808",fontFamily:"Georgia,serif"}}>0 карт</div>
+    </div>
+  );
+  const offset=(layers-1)*3;
+  return(
+    <div title={tip} style={{position:"relative",width:W+offset,height:H+offset+22,
+      flexShrink:0,cursor:"help"}}>
+      {Array.from({length:layers},(_,i)=>(
+        <div key={i} style={{position:"absolute",
+          left:(layers-1-i)*3,top:(layers-1-i)*3,
+          width:W,height:H,zIndex:i+1,
+          borderRadius:8,overflow:"hidden",
+          boxShadow:`0 ${1+i}px ${4+i*2}px rgba(0,0,0,0.65)`}}>
+          <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+        </div>
+      ))}
+      <div style={{position:"absolute",bottom:0,left:0,right:0,
+        textAlign:"center",fontSize:10,color:"#8a7050",fontFamily:"Georgia,serif"}}>
+        {count} карт
+      </div>
+    </div>
+  );
+}
+
+/* ── Card backs row (enemy/ally hand display) ─────────────────────────────── */
+function CardBackRow({count}){
+  if(!count||count<=0)return null;
+  const W=36,H=50;
+  const show=Math.min(count,7);
+  return(
+    <div style={{display:"flex",gap:2,justifyContent:"center",flexWrap:"wrap",marginTop:7}}>
+      {Array.from({length:show},(_,i)=>(
+        <div key={i} style={{width:W,height:H,borderRadius:4,overflow:"hidden",
+          boxShadow:"0 2px 4px rgba(0,0,0,0.5)",flexShrink:0}}>
+          <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+        </div>
+      ))}
+      {count>7&&<span style={{fontSize:9,color:"#6a5030",fontFamily:"Georgia,serif",
+        alignSelf:"center"}}>+{count-7}</span>}
     </div>
   );
 }
@@ -439,6 +516,9 @@ export default function App(){
   const [preview,setPreview]=useState(null);
   const [enemyCard,setEnemyCard]=useState({e1:null,e2:null});
   const [reviveAnim,setReviveAnim]=useState(false);
+  const [alexHandCount]=useState(3);
+  const [enemyHandCounts]=useState({e1:4,e2:3});
+  const [lastActions,setLastActions]=useState({e1:"",e2:"",alex:""});
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
 
@@ -598,6 +678,11 @@ export default function App(){
     else if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Победа!");}
     else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
     else{setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
+    setLastActions({
+      e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
+      e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
+      alex:logs.filter(l=>l.startsWith("Алекс")).slice(-1)[0]??"",
+    });
     setLoad(false);
   };
 
@@ -674,6 +759,11 @@ export default function App(){
     else if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
     else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
     else{setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
+    setLastActions({
+      e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
+      e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
+      alex:logs.filter(l=>l.startsWith("Алекс")).slice(-1)[0]??"",
+    });
     setLoad(false);
   };
 
@@ -760,138 +850,144 @@ export default function App(){
         onTarget={t=>handleTarget(preview,t)}
         onClose={()=>setPreview(null)}/>}
 
-      <div style={{position:"relative",zIndex:1,maxWidth:1100,margin:"0 auto",padding:"12px 14px"}}>
-        
-        {/* Header */}
+      <div style={{position:"relative",zIndex:1,maxWidth:1100,margin:"0 auto",padding:"10px 14px 6px"}}>
+
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-          marginBottom:14,borderBottom:"1px solid rgba(200,160,80,0.2)",paddingBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <span style={{fontSize:20,fontWeight:900,letterSpacing:4,color:"#c8901c",
-              fontFamily:"Georgia,serif",textShadow:"0 0 20px rgba(200,140,20,0.5)"}}>АЛЬЯНС</span>
-            <span style={{fontSize:11,color:"#5a4020",fontFamily:"Georgia,serif",letterSpacing:1}}>ХОД {turn}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11,color:"#6a5030",fontFamily:"Georgia,serif",marginRight:4}}>ОЧКИ ДЕЙСТВИЯ</span>
-              {Array.from({length:4},(_,i)=><Crystal key={i} active={i<cl(od-usedOd,0,4)}/>)}
-              <span style={{fontSize:13,color:"#c8a060",fontFamily:"Georgia,serif",marginLeft:4,fontWeight:700}}>
-                {cl(od-usedOd,0,4)}/{od}</span>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif"}}>🃏 {sharedDeck.length}</span>
-              <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",
-                borderRadius:6,border:`1px solid ${fatigueCycle>1?"rgba(224,82,82,0.35)":"rgba(200,160,80,0.1)"}`,
-                background:fatigueCycle>1?"rgba(224,82,82,0.08)":"rgba(0,0,0,0.2)",
-                transition:"all 0.3s"}}>
-                <img src={FATIGUE_ICON} alt="" style={{width:22,height:22,objectFit:"contain",
-                  opacity:fatigueCycle>1?1:0.25,
-                  filter:fatigueCycle>1?"drop-shadow(0 0 5px rgba(224,82,82,0.7))":"none",
-                  transition:"all 0.3s"}}/>
-                <div style={{fontFamily:"Georgia,serif",lineHeight:1.1}}>
-                  <div style={{fontSize:8,color:fatigueCycle>1?"#a04040":"#4a3010",letterSpacing:1}}>ИЗНУРЕНИЕ</div>
-                  <div style={{fontSize:11,fontWeight:700,color:fatigueCycle>1?"#e05252":"#3a2808"}}>
-                    {fatigueCycle>1?`Цикл ${fatigueCycle} · −${fatigueCycle===2?3:fatigueCycle===3?6:10}HP/🃏`:`Цикл 1`}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
-              color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
-              animation:phase==="busy"?"pulse 1s infinite":undefined}}>
-              {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}</div>
+          marginBottom:10,borderBottom:"1px solid rgba(200,160,80,0.2)",paddingBottom:8}}>
+          <span style={{fontSize:20,fontWeight:900,letterSpacing:4,color:"#c8901c",
+            fontFamily:"Georgia,serif",textShadow:"0 0 20px rgba(200,140,20,0.5)"}}>АЛЬЯНС</span>
+          <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
+            color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
+            animation:phase==="busy"?"pulse 1s infinite":undefined}}>
+            {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
           </div>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"265px 1fr 280px",gap:12}}>
-          
-          {/* LEFT — units */}
+        {/* ── Enemies row ──────────────────────────────────────────────────── */}
+        <div style={{display:"flex",gap:12,marginBottom:12}}>
+          {[
+            {key:"e1",name:en("e1"),sub:"агрессивный",bar:"#e05252",ring:"#e05252"},
+            {key:"e2",name:en("e2"),sub:"хитрая",bar:"#a03070",ring:"#a03070"},
+          ].map(({key,name,sub,bar,ring})=>{
+            const g=gs[key];const isDead=g.hp<=0;
+            return(
+              <div key={key} style={{flex:1,background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
+                border:`1px solid ${isDead?"rgba(255,255,255,0.04)":ring+"44"}`,
+                borderRadius:10,padding:"10px 14px",position:"relative",
+                animation:shaking===key?"shake 0.35s":flash[key]?"hitFlash 0.4s":undefined,
+                boxShadow:isDead?"none":`0 2px 12px rgba(0,0,0,0.5)`,
+                opacity:isDead?0.5:1,transition:"opacity 0.5s"}}>
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
+                    background:`radial-gradient(circle,${ring}44,rgba(0,0,0,0.7))`,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:16,opacity:isDead?0.2:1,border:`2px solid ${ring}55`}}>
+                    {name.charAt(0)}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
+                        color:isDead?"#333":"#d4c4a0",textDecoration:isDead?"line-through":"none"}}>
+                        {name}</span>
+                      {sub&&<span style={{fontSize:9,color:"#6a5030"}}>{sub}</span>}
+                      {g.poison>0&&<span style={{fontSize:10,color:"#7bc67e"}}>☠×{g.poison}</span>}
+                      {g.bleed>0&&<span style={{fontSize:10,color:"#cc3344"}}>🩸×{g.bleed}</span>}
+                    </div>
+                    <HpBar hp={g.hp} maxHp={MHP[key]} color={bar} flash={flash[key]}/>
+                    {lastActions[key]&&!isDead&&(
+                      <div style={{fontSize:9,color:"#5a4030",marginTop:4,fontFamily:"Georgia,serif",
+                        fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {lastActions[key]}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!isDead&&<CardBackRow count={enemyHandCounts[key]}/>}
+                {isDead&&<div style={{position:"absolute",inset:0,borderRadius:10,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  background:"rgba(0,0,0,0.4)",pointerEvents:"none",zIndex:3}}>
+                  <span style={{fontSize:20,color:"#333"}}>☠</span>
+                </div>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Middle: Alex+Log | Chat ──────────────────────────────────────── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:12,marginBottom:10}}>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"#5a2020",fontFamily:"Georgia,serif",marginBottom:2}}>ПРОТИВНИКИ</div>
-            <UnitCard name={en("e1")} sub="агрессивный" hp={gs.e1.hp} maxHp={MHP.e1} bar="#e05252" ring="#e05252" flash={flash.e1} poison={gs.e1.poison} bleed={gs.e1.bleed} dead={gs.e1.hp<=0} shake={shaking==="e1"}/>
-            <UnitCard name={en("e2")} sub="хитрая" hp={gs.e2.hp} maxHp={MHP.e2} bar="#a03070" ring="#a03070" flash={flash.e2} poison={gs.e2.poison} bleed={gs.e2.bleed} dead={gs.e2.hp<=0} shake={shaking==="e2"}/>
-            <div style={{height:1,background:"rgba(200,160,80,0.1)",margin:"4px 0"}}/>
-            <div style={{fontSize:10,letterSpacing:2,color:"#1a3040",fontFamily:"Georgia,serif"}}>СОЮЗНИКИ</div>
-            <UnitCard name="Алекс" sub="напарник (1ОД)" hp={gs.alex.hp} maxHp={MHP.alex} bar="#4caf82" ring="#4caf82" flash={flash.alex} poison={gs.alex.poison} bleed={gs.alex.bleed} dead={gs.alex.hp<=0} shake={shaking==="alex"} reviving={reviveAnim}/>
-            <UnitCard name="Ты" hp={gs.you.hp} maxHp={MHP.you} bar="#4c7fe0" ring="#4c7fe0" flash={flash.you} poison={gs.you.poison} bleed={gs.you.bleed} dead={gs.you.hp<=0} shake={shaking==="you"}/>
+
+            {/* Alex block */}
+            <div style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
+              border:`1px solid ${gs.alex.hp<=0?"rgba(255,255,255,0.04)":"rgba(76,175,130,0.35)"}`,
+              borderRadius:10,padding:"10px 14px",position:"relative",
+              animation:reviveAnim?"reviveGlow 1s":shaking==="alex"?"shake 0.35s":flash.alex?"hitFlash 0.4s":undefined,
+              boxShadow:reviveAnim?"0 0 30px rgba(255,215,0,0.5)":gs.alex.hp<=0?"none":"0 2px 12px rgba(0,0,0,0.5)"}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
+                  background:"radial-gradient(circle,rgba(76,175,130,0.3),rgba(0,0,0,0.7))",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:16,opacity:gs.alex.hp<=0?0.2:1,border:"2px solid rgba(76,175,130,0.4)"}}>А</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
+                      color:gs.alex.hp<=0?"#333":"#d4c4a0"}}>Алекс</span>
+                    <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,
+                      background:gs.alex.hp<=0?"rgba(100,0,0,0.3)":"rgba(76,175,130,0.15)",
+                      color:gs.alex.hp<=0?"#aa4444":"#4caf82",fontFamily:"Georgia,serif"}}>
+                      {gs.alex.hp<=0?"павший":"жив"}</span>
+                    {gs.alex.poison>0&&<span style={{fontSize:10,color:"#7bc67e"}}>☠×{gs.alex.poison}</span>}
+                    {gs.alex.bleed>0&&<span style={{fontSize:10,color:"#cc3344"}}>🩸×{gs.alex.bleed}</span>}
+                  </div>
+                  <HpBar hp={gs.alex.hp} maxHp={MHP.alex} color="#4caf82" flash={flash.alex}/>
+                  {lastActions.alex&&(
+                    <div style={{fontSize:9,color:"#2a5038",marginTop:4,fontFamily:"Georgia,serif",fontStyle:"italic"}}>
+                      {lastActions.alex}</div>
+                  )}
+                </div>
+              </div>
+              {gs.alex.hp>0&&<CardBackRow count={alexHandCount}/>}
+              {gs.alex.hp<=0&&<div style={{position:"absolute",inset:0,borderRadius:10,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                background:"rgba(0,0,0,0.5)",pointerEvents:"none"}}>
+                <span style={{fontSize:14,color:"#664444",fontFamily:"Georgia,serif",letterSpacing:2}}>ПАВШИЙ</span>
+              </div>}
+            </div>
+
+            {/* Combo bar */}
+            {combo&&<div style={{padding:"7px 14px",background:"rgba(200,154,60,0.12)",
+              border:"1.5px solid rgba(200,154,60,0.45)",borderRadius:8,
+              animation:"comboPulse 0.8s infinite",fontSize:12,color:"#e09a3c",
+              fontFamily:"Georgia,serif",fontWeight:700}}>⚡ КОМБО: {combo.name}</div>}
+
+            {/* Log */}
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
-              borderRadius:8,padding:"8px 10px",marginTop:4}}>
+              borderRadius:8,padding:"8px 10px",flex:1}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:150,overflowY:"auto"}}>
+              <div style={{maxHeight:160,overflowY:"auto"}}>
                 {log.length===0?<div style={{fontSize:10,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
                   :log.map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
               </div>
             </div>
+
+            {/* Joint / spy status */}
             {jointCard&&(
-              <div style={{padding:"12px",background:"rgba(200,154,60,0.08)",border:"1.5px solid rgba(200,154,60,0.35)",borderRadius:10,animation:"fadeIn 0.2s"}}>
-                <div style={{fontSize:11,color:"#e09a3c",fontFamily:"Georgia,serif",marginBottom:4}}>
+              <div style={{padding:"10px 12px",background:"rgba(200,154,60,0.08)",border:"1.5px solid rgba(200,154,60,0.35)",borderRadius:10,animation:"fadeIn 0.2s"}}>
+                <div style={{fontSize:11,color:"#e09a3c",fontFamily:"Georgia,serif",marginBottom:3}}>
                   💥 СОВМЕСТНЫЙ УДАР {jointTarget?`→ ${en(jointTarget)}`:""}</div>
                 {loading&&!jointReady&&<div style={{fontSize:10,color:"#888",animation:"pulse 1s infinite"}}>⏳ Спрашиваю Алекса…</div>}
                 {jointReady&&<div style={{fontSize:11,color:"#4caf82",fontFamily:"Georgia,serif"}}>✓ Готов — завершай ход</div>}
                 {!loading&&!jointReady&&jointTarget&&<div style={{fontSize:11,color:"#e05252",fontFamily:"Georgia,serif"}}>✗ Алекс не готов</div>}
               </div>)}
             {spyCard&&(
-              <div style={{padding:"10px",background:"rgba(139,92,246,0.08)",border:"1.5px solid rgba(139,92,246,0.3)",borderRadius:10,animation:"fadeIn 0.2s"}}>
+              <div style={{padding:"8px 12px",background:"rgba(139,92,246,0.08)",border:"1.5px solid rgba(139,92,246,0.3)",borderRadius:10,animation:"fadeIn 0.2s"}}>
                 <div style={{fontSize:11,color:"#8b5cf6",fontFamily:"Georgia,serif"}}>🔍 Шпионаж активен</div>
               </div>)}
           </div>
 
-          {/* MIDDLE — log + hand */}
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {combo&&<div style={{padding:"8px 14px",background:"rgba(200,154,60,0.12)",
-              border:"1.5px solid rgba(200,154,60,0.45)",borderRadius:8,
-              animation:"comboPulse 0.8s infinite",fontSize:12,color:"#e09a3c",
-              fontFamily:"Georgia,serif",fontWeight:700}}>⚡ КОМБО: {combo.name}</div>}
-
-            <div style={{background:"rgba(0,0,0,0.55)",border:"1px solid rgba(200,160,80,0.15)",borderRadius:10,padding:14,flex:1}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontSize:10,letterSpacing:2,color:"#4a3010",fontFamily:"Georgia,serif"}}>КАРТЫ В РУКЕ</div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={skipTurn} disabled={!isP} style={{background:"rgba(200,160,80,0.06)",
-                    color:isP?"#8a7040":"#2a1808",border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,
-                    padding:"6px 12px",fontSize:10,fontWeight:700,cursor:isP?"pointer":"default",fontFamily:"Georgia,serif"}}>
-                    ПРОПУСК +1ОД</button>
-                  <button onClick={endTurn} disabled={!canEnd} style={{
-                    background:canEnd?"linear-gradient(135deg,#8a5010,#c87820)":"rgba(255,255,255,0.04)",
-                    color:canEnd?"#fff":"#2a1808",border:"none",borderRadius:6,
-                    padding:"6px 18px",fontSize:11,fontWeight:700,cursor:canEnd?"pointer":"default",
-                    fontFamily:"Georgia,serif",boxShadow:canEnd?"0 0 20px rgba(200,120,30,0.4)":"none"}}>
-                    {loading?"⏳":"ЗАВЕРШИТЬ ХОД →"}</button>
-                </div>
-              </div>
-              {played.length>0&&(
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,padding:"6px 8px",
-                  background:"rgba(200,154,60,0.06)",borderRadius:8,border:"1px solid rgba(200,154,60,0.2)"}}>
-                  <span style={{fontSize:9,color:"#8a6020",fontFamily:"Georgia,serif",alignSelf:"center"}}>В ход:</span>
-                  {played.map((p,i)=>{
-                    const def=CARDS[p.card.type];
-                    return <div key={p.card.uid} style={{fontSize:9,background:"rgba(200,154,60,0.15)",
-                      border:`1px solid ${def.c}55`,borderRadius:5,padding:"3px 8px",
-                      color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.25s ${i*0.05}s both`}}>
-                      {def.e} {def.n}{p.target?` →${en(p.target)}`:""}
-                    </div>;
-                  })}
-                </div>)}
-              <div style={{fontSize:10,color:"#3a2808",marginBottom:10,fontFamily:"Georgia,serif"}}>
-                💡 Нажми карту чтобы выбрать действие и цель
-              </div>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                {hand.map(card=>{
-                  const def=CARDS[card.type];
-                  const sel=!!played.find(p=>p.card.uid===card.uid);
-                  const jp=jointCard?.uid===card.uid;
-                  const sp=spyCard?.uid===card.uid;
-                  const notOd=odLeft<def.od&&!sel&&!jp&&!sp;
-                  const isCb=combo&&comboTypes.includes(card.type)&&sel;
-                  return <GameCard key={card.uid} card={card} selected={sel||sp} jointPending={jp}
-                    dimmed={!isP||notOd} comboWith={isCb}
-                    onPreview={()=>handlePreview(card)}/>;
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT — chat */}
+          {/* Chat */}
           <div style={{background:"rgba(0,0,0,0.6)",border:"1px solid rgba(200,160,80,0.15)",
             borderRadius:10,padding:14,display:"flex",flexDirection:"column"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
@@ -900,7 +996,7 @@ export default function App(){
               <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — АЛЕКС</div>
               {loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
             </div>
-            <div style={{flex:1,overflowY:"auto",marginBottom:10,minHeight:160,maxHeight:360}}>
+            <div style={{flex:1,overflowY:"auto",marginBottom:10,minHeight:120,maxHeight:280}}>
               {chat.map((m,i)=><Bubble key={i} m={m}/>)}
               <div ref={chatEnd}/>
             </div>
@@ -926,6 +1022,117 @@ export default function App(){
             </div>
           </div>
         </div>
+
+        {/* ── Hand area ──────────────────────────────────────────────────────── */}
+        <div style={{background:"rgba(0,0,0,0.45)",border:"1px solid rgba(200,160,80,0.12)",
+          borderRadius:10,padding:"10px 14px",marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",fontFamily:"Georgia,serif"}}>РУКА</div>
+            <div style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif"}}>В руке: {hand.length} / 5</div>
+          </div>
+          {played.length>0&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,padding:"5px 8px",
+              background:"rgba(200,154,60,0.06)",borderRadius:8,border:"1px solid rgba(200,154,60,0.2)"}}>
+              <span style={{fontSize:9,color:"#8a6020",fontFamily:"Georgia,serif",alignSelf:"center"}}>В ход:</span>
+              {played.map((p,i)=>{
+                const def=CARDS[p.card.type];
+                return <div key={p.card.uid} style={{fontSize:9,background:"rgba(200,154,60,0.15)",
+                  border:`1px solid ${def.c}55`,borderRadius:5,padding:"3px 8px",
+                  color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.25s ${i*0.05}s both`}}>
+                  {def.e} {def.n}{p.target?` →${en(p.target)}`:""}
+                </div>;
+              })}
+            </div>)}
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center",minHeight:80}}>
+            {hand.map(card=>{
+              const def=CARDS[card.type];
+              const sel=!!played.find(p=>p.card.uid===card.uid);
+              const jp=jointCard?.uid===card.uid;
+              const sp=spyCard?.uid===card.uid;
+              const notOd=odLeft<def.od&&!sel&&!jp&&!sp;
+              const isCb=combo&&comboTypes.includes(card.type)&&sel;
+              return <GameCard key={card.uid} card={card} selected={sel||sp} jointPending={jp}
+                dimmed={!isP||notOd} notEnoughOd={notOd} comboWith={isCb}
+                onPreview={()=>handlePreview(card)}/>;
+            })}
+          </div>
+          {phase==="player"&&!loading&&(
+            <div style={{fontSize:9,color:"#3a2808",marginTop:8,textAlign:"center",fontFamily:"Georgia,serif"}}>
+              💡 Нажми карту чтобы выбрать действие и цель
+            </div>)}
+        </div>
+
+        {/* ── Bottom bar ─────────────────────────────────────────────────────── */}
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",
+          background:"rgba(0,0,0,0.65)",border:"1px solid rgba(200,160,80,0.15)",
+          borderRadius:10,flexWrap:"wrap"}}>
+
+          {/* Deck stack */}
+          <DeckStack count={sharedDeck.length} fatigueCycle={fatigueCycle}/>
+
+          <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
+
+          {/* HP */}
+          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:150}}>
+            <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>HP ИГРОКА</div>
+            <HpBar hp={gs.you.hp} maxHp={MHP.you} color="#4c7fe0" flash={flash.you}/>
+          </div>
+
+          <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
+
+          {/* AP crystals */}
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>ОЧКИ ДЕЙСТВИЯ</div>
+            <div style={{display:"flex",gap:3,alignItems:"center"}}>
+              {Array.from({length:od},(_,i)=><Crystal key={i} active={i<odLeft} size={28}/>)}
+              <span style={{fontSize:9,color:"#5a4020",fontFamily:"Georgia,serif",marginLeft:4}}>+2/ход</span>
+            </div>
+          </div>
+
+          {/* Turn */}
+          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+            <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>ХОД</div>
+            <div style={{fontSize:18,fontWeight:700,color:"#c8b080",fontFamily:"Georgia,serif",lineHeight:1}}>{turn}</div>
+          </div>
+
+          {/* Fatigue */}
+          <div title={`Цикл ${fatigueCycle}. ${fatigueCycle>1?`Каждая карта −${fatigueCycle===2?3:fatigueCycle===3?6:10}HP`:"Изнурения нет"}`}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",
+            borderRadius:6,border:`1px solid ${fatigueCycle>1?"rgba(224,82,82,0.35)":"rgba(200,160,80,0.08)"}`,
+            background:fatigueCycle>1?"rgba(224,82,82,0.08)":"rgba(0,0,0,0.2)",
+            transition:"all 0.3s",cursor:"help"}}>
+            <img src={FATIGUE_ICON} alt="" style={{width:22,height:22,objectFit:"contain",
+              opacity:fatigueCycle>1?1:0.22,
+              filter:fatigueCycle>1?"drop-shadow(0 0 5px rgba(224,82,82,0.7))":"none",
+              transition:"all 0.3s"}}/>
+            <div style={{fontFamily:"Georgia,serif",lineHeight:1.15}}>
+              <div style={{fontSize:8,color:fatigueCycle>1?"#a04040":"#4a3010",letterSpacing:1}}>ИЗНУРЕНИЕ</div>
+              <div style={{fontSize:10,fontWeight:700,color:fatigueCycle>1?"#e05252":"#3a2808"}}>
+                {fatigueCycle>1?`⚠ −${fatigueCycle===2?3:fatigueCycle===3?6:10}HP/🃏`:"Цикл 1 — норм"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{flex:1}}/>
+
+          {/* Buttons */}
+          <button onClick={skipTurn} disabled={!isP} style={{
+            background:"rgba(200,160,80,0.06)",color:isP?"#8a7040":"#2a1808",
+            border:"1px solid rgba(200,160,80,0.2)",borderRadius:7,
+            padding:"8px 14px",fontSize:10,fontWeight:700,cursor:isP?"pointer":"default",
+            fontFamily:"Georgia,serif"}}>
+            ПРОПУСК +1ОД
+          </button>
+          <button onClick={endTurn} disabled={!canEnd} style={{
+            background:canEnd?"linear-gradient(135deg,#8a5010,#c87820)":"rgba(255,255,255,0.04)",
+            color:canEnd?"#fff":"#2a1808",border:"none",borderRadius:7,
+            padding:"10px 22px",fontSize:12,fontWeight:700,cursor:canEnd?"pointer":"default",
+            fontFamily:"Georgia,serif",letterSpacing:0.5,
+            boxShadow:canEnd?"0 0 20px rgba(200,120,30,0.4)":"none"}}>
+            {loading?"⏳":"ЗАВЕРШИТЬ ХОД →"}
+          </button>
+        </div>
+
       </div>
 
       {/* Mulligan overlay */}
@@ -933,26 +1140,35 @@ export default function App(){
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",display:"flex",
           alignItems:"center",justifyContent:"center",zIndex:99,backdropFilter:"blur(12px)",animation:"fadeIn 0.3s"}}>
           <div style={{background:"linear-gradient(135deg,#0e0a06,#180e04)",
-            border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"40px 50px",textAlign:"center",
-            boxShadow:"0 0 60px rgba(200,120,20,0.3)",maxWidth:600}}>
-            <div style={{fontSize:20,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
-              color:"#c8901c",marginBottom:8}}>МАЛЛИГАН</div>
-            <div style={{fontSize:12,color:"#6a5030",marginBottom:20,fontFamily:"Georgia,serif"}}>
-              Выбери до 2 карт для замены ({mulliganMarked.size}/2)
+            border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"36px 48px",textAlign:"center",
+            boxShadow:"0 0 60px rgba(200,120,20,0.3)",maxWidth:820}}>
+            <div style={{fontSize:22,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
+              color:"#c8901c",marginBottom:6}}>МАЛЛИГАН</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:22,fontFamily:"Georgia,serif"}}>
+              Выберите до 2 карт для замены
             </div>
-            <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:24,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:14,justifyContent:"center",marginBottom:18,flexWrap:"wrap"}}>
               {hand.map(card=>{
-                const def=CARDS[card.type];const marked=mulliganMarked.has(card.uid);
-                return <div key={card.uid} onClick={()=>{
-                  setMulliganMarked(s=>{const ns=new Set(s);if(ns.has(card.uid))ns.delete(card.uid);else if(ns.size<2)ns.add(card.uid);return ns;});
-                }} style={{cursor:"pointer",border:`2px solid ${marked?"#c8901c":"rgba(200,160,80,0.2)"}`,
-                  borderRadius:8,padding:"8px 12px",background:marked?"rgba(200,144,28,0.15)":"rgba(0,0,0,0.4)",
-                  transition:"all 0.15s",transform:marked?"translateY(-6px)":"none"}}>
-                  <div style={{fontSize:18}}>{def.e}</div>
-                  <div style={{fontSize:10,color:def.c,fontFamily:"Georgia,serif",marginTop:4}}>{def.n}</div>
-                  {marked&&<div style={{fontSize:9,color:"#c8901c",marginTop:2}}>✓ заменить</div>}
-                </div>;
+                const marked=mulliganMarked.has(card.uid);
+                return(
+                  <div key={card.uid} style={{cursor:"pointer",position:"relative",
+                    transform:marked?"translateY(-15px)":"none",transition:"transform 0.2s"}}>
+                    <GameCard card={card} selected={false} dimmed={false}
+                      notEnoughOd={false} jointPending={false} comboWith={false}
+                      onPreview={()=>{
+                        setMulliganMarked(s=>{const ns=new Set(s);
+                          if(ns.has(card.uid))ns.delete(card.uid);
+                          else if(ns.size<2)ns.add(card.uid);return ns;});
+                      }}/>
+                    {marked&&<div style={{position:"absolute",inset:0,borderRadius:8,
+                      border:"2px solid #e05252",pointerEvents:"none",
+                      boxShadow:"0 0 14px rgba(224,82,82,0.5)"}}/>}
+                  </div>
+                );
               })}
+            </div>
+            <div style={{fontSize:11,color:"#6a5030",marginBottom:18,fontFamily:"Georgia,serif"}}>
+              Выбрано для замены: {mulliganMarked.size} / 2
             </div>
             <button onClick={()=>{
               let deck=[...sharedDeck];let cycle=fatigueCycle;
@@ -963,7 +1179,7 @@ export default function App(){
               setMulliganMarked(new Set());setPhase("player");
               addChat("alex","Бой начат! Удачи.");
             }} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
-              border:"none",borderRadius:8,padding:"12px 36px",fontSize:12,fontWeight:700,letterSpacing:2,
+              border:"none",borderRadius:8,padding:"14px 44px",fontSize:13,fontWeight:700,letterSpacing:2,
               cursor:"pointer",fontFamily:"Georgia,serif",boxShadow:"0 0 30px rgba(200,120,20,0.4)"}}>
               НАЧАТЬ БОЙ ▶
             </button>
