@@ -43,6 +43,7 @@ const ART = {
   energy:   "/assets/cards/energy.jpg",
   revive:   "/assets/cards/revive.jpg",
   poison:   "/assets/cards/poison.jpg",
+  bleed:    "/assets/cards/bleed.jpg",
 };
 
 /* ── API config — set VITE_ANTHROPIC_API_KEY in .env ───────────────────── */
@@ -54,26 +55,30 @@ const MHP = { you:100, alex:100, e1:100, e2:100 };
 const HAND_SIZE = 4;
 
 const CARDS = {
-  attack:  {e:"⚔️",  n:"АТАКА",      d:"−12HP врагу",              c:"#e05252", t:"enemy", od:1},
-  double:  {e:"⚔️⚔️",n:"ДВОЙНОЙ",   d:"−8HP дважды одному врагу", c:"#ff7070", t:"enemy", od:2},
-  shield:  {e:"🛡️", n:"ЩИТ",        d:"+10HP себе",               c:"#4c7fe0", t:null,    od:1},
-  healAlex:{e:"💉",  n:"ИСЦЕЛИТЬ",   d:"+12HP Алексу",             c:"#4caf82", t:null,    od:1},
-  poison:  {e:"☠️",  n:"ЯД",         d:"−4HP/ход ×3",              c:"#7bc67e", t:"enemy", od:1},
-  rage:    {e:"🔥",  n:"ЯРОСТЬ",     d:"−20HP (2ОД)",              c:"#e06030", t:"enemy", od:2},
-  joint:   {e:"💥",  n:"СОВМ.",      d:"−28HP если Алекс готов",   c:"#e09a3c", t:"enemy", od:1},
-  spy:     {e:"🔍",  n:"ШПИОНАЖ",    d:"Копировать карту врага",   c:"#8b5cf6", t:null,    od:1},
-  energy:  {e:"⚡",  n:"ЭНЕРГИЯ",    d:"+2ОД на след. ход",        c:"#f0d060", t:null,    od:1},
-  trap:    {e:"🪤",  n:"ЛОВУШКА",    d:"−8HP при атаке врага",     c:"#d97706", t:null,    od:1},
-  counter: {e:"↩️",  n:"КОНТР",      d:"Отразить урон врагу",      c:"#06b6d4", t:null,    od:1},
-  revive:  {e:"✨",  n:"ВОЗРОЖДЕНИЕ",d:"Воскресить союзника (20HP)",c:"#ffd700",t:null,    od:2},
+  attack:  {e:"⚔️",  n:"АТАКА",        d:"−8 HP врагу",                              c:"#e05252", t:"enemy", od:1},
+  double:  {e:"⚔️⚔️",n:"ДВОЙНОЙ",     d:"−8 HP двум врагам",                        c:"#ff7070", t:"enemy", od:2},
+  shield:  {e:"🛡️", n:"ЩИТ",          d:"+10 HP себе",                               c:"#4c7fe0", t:null,    od:1},
+  healAlex:{e:"💉",  n:"ИСЦЕЛИТЬ",     d:"+12 HP Алексу",                             c:"#4caf82", t:null,    od:1},
+  poison:  {e:"☠️",  n:"ЯД",           d:"Яд: 3 тика по −5 HP",                      c:"#7bc67e", t:"enemy", od:1},
+  bleed:   {e:"🩸",  n:"КРОВОТЕЧЕНИЕ", d:"Кровотечение: 4 тика по −3 HP (стакается)", c:"#cc3344", t:"enemy", od:1},
+  rage:    {e:"🔥",  n:"ЯРОСТЬ",       d:"−18 HP врагу, −4 HP себе",                 c:"#e06030", t:"enemy", od:2},
+  joint:   {e:"💥",  n:"СОВМ. УДАР",  d:"22 урона (нужно согласие Алекса)",          c:"#e09a3c", t:"enemy", od:1},
+  spy:     {e:"🔍",  n:"ШПИОНАЖ",     d:"Намерение врага + взять его карту",         c:"#8b5cf6", t:null,    od:1},
+  energy:  {e:"⚡",  n:"ЭНЕРГИЯ",     d:"+2 ОД на след. ход",                        c:"#f0d060", t:null,    od:1},
+  trap:    {e:"🪤",  n:"ЛОВУШКА",     d:"Ловушка: −10 HP атакующему врагу",         c:"#d97706", t:null,    od:1},
+  counter: {e:"↩️",  n:"КОНТР",       d:"Отразить урон по тебе обратно врагу",      c:"#06b6d4", t:null,    od:1},
+  revive:  {e:"✨",  n:"ВОЗРОЖДЕНИЕ", d:"Воскресить Алекса (30 HP). Только если мёртв",c:"#ffd700",t:null,  od:2},
 };
 
-const POOL = [
+const DECK_TEMPLATE = [
   "attack","attack","attack","double",
   "shield","shield","healAlex","revive",
-  "poison","rage","joint",
+  "poison","bleed","rage","joint",
   "spy","energy","trap","counter",
 ];
+const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
+const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
+function createGameInit(){_uid=0;const d=shuffle([...DECK_TEMPLATE]);const{cards:h,deck}=drawFromDeck(4,d,1);return{hand:h.map(c=>({...c,flipIn:false})),deck,fatigueCycle:1};}
 
 const COMBOS = [
   {needs:["rage","poison"],    name:"Ядовитый огонь 🔥☠️",  bonus:(_,t)=>({tgt:t,hp:24,poison:4}), msg:"КОМБО: Ядовитый огонь!"},
@@ -87,8 +92,6 @@ const COMBOS = [
 let _uid=0;
 const nuid=()=>String(++_uid);
 const rnd=n=>Math.floor(Math.random()*n);
-const pickCard=()=>POOL[rnd(POOL.length)];
-const drawN=n=>Array.from({length:n},()=>({uid:nuid(),type:pickCard(),flipIn:true}));
 const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const en=k=>k==="e1"?"Страж":"Тень";
 
@@ -101,10 +104,10 @@ function detectCombo(played){
   return null;
 }
 const initGs=()=>({
-  you: {hp:MHP.you, maxHp:MHP.you, poison:0,trap:false,counter:false},
-  alex:{hp:MHP.alex,maxHp:MHP.alex,poison:0},
-  e1:  {hp:MHP.e1,  maxHp:MHP.e1,  poison:0},
-  e2:  {hp:MHP.e2,  maxHp:MHP.e2,  poison:0},
+  you: {hp:MHP.you, maxHp:MHP.you, poison:0,bleed:0,trap:false,counter:false},
+  alex:{hp:MHP.alex,maxHp:MHP.alex,poison:0,bleed:0},
+  e1:  {hp:MHP.e1,  maxHp:MHP.e1,  poison:0,bleed:0},
+  e2:  {hp:MHP.e2,  maxHp:MHP.e2,  poison:0,bleed:0},
 });
 
 /* ── Small components ─────────────────────────────────────────────────────── */
@@ -128,7 +131,7 @@ function HpBar({hp,maxHp,color,flash}){
   );
 }
 
-function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,dead,shake,reviving,children}){
+function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,bleed,dead,shake,reviving,children}){
   return(
     <div style={{background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
       border:`1px solid ${reviving?"rgba(255,215,0,0.8)":dead?"rgba(255,255,255,0.04)":ring+"44"}`,
@@ -146,6 +149,7 @@ function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,dead,shake,reviving,c
             {name}{dead?" ☠":""}</span>
           {sub&&<span style={{fontSize:9,color:"#6a5030",fontFamily:"Georgia,serif"}}>{sub}</span>}
           {poison>0&&<span style={{fontSize:10,color:"#7bc67e"}}>☠×{poison}</span>}
+          {bleed>0&&<span style={{fontSize:10,color:"#cc3344"}}>🩸×{bleed}</span>}
         </div>
         <HpBar hp={hp} maxHp={maxHp} color={bar} flash={flash}/>
       </div>
@@ -406,14 +410,19 @@ function LogLine({text}){
 
 /* ── Main App ─────────────────────────────────────────────────────────────── */
 export default function App(){
+  const [gameInit]=useState(createGameInit);
   const [gs,setGs]=useState(initGs);
-  const [hand,setHand]=useState(()=>drawN(HAND_SIZE).map(c=>({...c,flipIn:false})));
+  const [hand,setHand]=useState(gameInit.hand);
+  const [sharedDeck,setSharedDeck]=useState(gameInit.deck);
+  const [fatigueCycle,setFatigueCycle]=useState(gameInit.fatigueCycle);
+  const [pendingDrawCard,setPendingDrawCard]=useState(null);
+  const [mulliganMarked,setMulliganMarked]=useState(()=>new Set());
   const [played,setPlayed]=useState([]);
   const [jointCard,setJC]=useState(null);
   const [jointReady,setJR]=useState(false);
   const [jointTarget,setJointTarget]=useState(null);
   const [spyCard,setSpy]=useState(null);
-  const [phase,setPhase]=useState("player");
+  const [phase,setPhase]=useState("mulligan");
   const [winner,setWinner]=useState(null);
   const [log,setLog]=useState([]);
   const [chat,setChat]=useState([]);
@@ -422,18 +431,17 @@ export default function App(){
   const [loading,setLoad]=useState(false);
   const [flash,setFlash]=useState({});
   const [shaking,setShake]=useState(null);
-  const [od,setOd]=useState(1);
+  const [od,setOd]=useState(2);
   const [odBank,setOdBank]=useState(0);
   const [comboGlow,setComboGlow]=useState(null);
   const [lastMsg,setLastMsg]=useState("");
   const [preview,setPreview]=useState(null);
   const [enemyCard,setEnemyCard]=useState({e1:null,e2:null});
-  const [comboFlash,setComboFlash]=useState(null);
   const [reviveAnim,setReviveAnim]=useState(false);
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
 
-  useEffect(()=>{setChat([{from:"alex",text:"Страж бьёт сильно, Тень травит. 1 очко действия за ход. Пробуй комбо!"}]);},[]);
+  useEffect(()=>{setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
 
@@ -527,7 +535,7 @@ export default function App(){
         else if(card==="poison"&&ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`Страж ☠️→${tgt==="you"?"тебя":"Алекса"}: яд`);}
         else{
           let dmg=card==="rage"?20:card==="double"?8:12;
-          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-8,0,999)};hit("e1",8);logs.push(`🪤 Ловушка! Страж −8HP`);}
+          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-10,0,999)};hit("e1",10);logs.push(`🪤 Ловушка! Страж −10HP`);}
           if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-dmg,0,999)};hit("e1",dmg);logs.push(`↩️ Контрудар! Страж −${dmg}HP`);dmg=0;}
           if(dmg>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-dmg,0,ng[tgt].maxHp)};hit(tgt,dmg);logs.push(`Страж ${card==="rage"?"🔥":card==="double"?"⚔️⚔️":"⚔️"}→${tgt==="you"?"тебя":"Алекса"}: −${dmg}`);}
           if(card==="double"&&dmg>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-8,0,ng[tgt].maxHp)};hit(tgt,8);logs.push(`Страж ⚔️→ второй удар: −8`);}
@@ -549,15 +557,16 @@ export default function App(){
           if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`Тень+Страж💥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
         } else {
           let d=10;
-          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-8,0,999)};hit("e2",8);logs.push(`🪤 Ловушка! Тень −8HP`);}
+          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-10,0,999)};hit("e2",10);logs.push(`🪤 Ловушка! Тень −10HP`);}
           if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-d,0,999)};hit("e2",d);logs.push(`↩️ Контрудар! Тень −${d}HP`);d=0;}
           if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`Тень ⚔️→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
         }
       }
     }
-    // Poison tick all
+    // Poison + bleed ticks
     for(const k of["you","alex","e1","e2"]){
-      if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-4,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −4HP`);hit(k,4);}
+      if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-5,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −5HP`);hit(k,5);}
+      if(ng[k]?.bleed>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-3,0,ng[k].maxHp),bleed:ng[k].bleed-1};logs.push(`🩸 Кровь(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −3HP`);hit(k,3);}
     }
     return{ng,hits,e1Card,e2Card};
   };
@@ -572,17 +581,22 @@ export default function App(){
     const logs=[];
     const ar=await alexTurnAPI(g,0,"",false);addChat("alex",ar.message);
     for(const a of(ar.actions??[]).slice(0,1)){
-      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=7;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){g.alex={...g.alex,hp:cl(g.alex.hp+8,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +8HP");}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +10HP");}
+      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
     const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
+    // Draw 1 card at end of skip turn
+    {let capDeck=[...sharedDeck];let capCycle=fatigueCycle;
+    const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capDeck,capCycle);
+    if(hand.length>=5){setPendingDrawCard(drawn);setSharedDeck(d3);setFatigueCycle(c3);}
+    else{setHand(h=>[...h,drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setSharedDeck(d3);setFatigueCycle(c3);}}
     if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
     else if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Победа!");}
-    else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(1+nb);setOdBank(0);setPhase("player");}
-    else{setTurn(t=>t+1);setOd(1+nb);setOdBank(0);setPhase("player");}
+    else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
+    else{setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
     setLoad(false);
   };
 
@@ -590,8 +604,13 @@ export default function App(){
   const endTurn=async()=>{
     if(phase!=="player"||loading||(played.length===0&&!jointCard&&!spyCard))return;
     setPhase("busy");setLoad(true);
+    let capturedDeck=[...sharedDeck];let capturedCycle=fatigueCycle;
     let g={you:{...gs.you},alex:{...gs.alex},e1:{...gs.e1},e2:{...gs.e2}};
     const logs=[];let nob=odBank;
+    // Fatigue damage per card played
+    const fatiguePerCard=capturedCycle===1?0:capturedCycle===2?3:capturedCycle===3?6:10;
+    const fatigueDmg=fatiguePerCard*(played.length+(jointCard?1:0)+(spyCard?1:0));
+    if(fatigueDmg>0){g.you={...g.you,hp:cl(g.you.hp-fatigueDmg,0,g.you.maxHp)};doFlash("you",fatigueDmg);logs.push(`😓 Изнурение (цикл ${capturedCycle}): −${fatigueDmg}HP`);}
     const combo=detectCombo(played);let cr=null;
     if(combo){
       const tgts=played.filter(p=>CARDS[p.card.type].t==="enemy");
@@ -601,26 +620,33 @@ export default function App(){
     }
     for(const{card,target}of played){
       switch(card.type){
-        case"attack":{const d=7;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);logs.push(`Ты ⚔️→${en(target)}: −${d}`);break;}
-        case"shield":{g.you={...g.you,hp:cl(g.you.hp+8,0,g.you.maxHp)};logs.push("Ты 🛡️: +8HP");break;}
-        case"healAlex":{g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Ты 💉→Алекс: +10HP");break;}
+        case"attack":{const d=8;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);logs.push(`Ты ⚔️→${en(target)}: −${d}`);break;}
+        case"shield":{g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Ты 🛡️: +10HP");break;}
+        case"healAlex":{if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+12,0,g.alex.maxHp)};logs.push("Ты 💉→Алекс: +12HP");}break;}
         case"poison":{if(g[target].hp>0){g[target]={...g[target],poison:3};logs.push(`Ты ☠️→${en(target)}: яд`);}break;}
-        case"rage":{const d=14;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);logs.push(`Ты 🔥→${en(target)}: −${d}`);break;}
+        case"bleed":{if(g[target].hp>0){g[target]={...g[target],bleed:(g[target].bleed??0)+4};logs.push(`Ты 🩸→${en(target)}: кровотечение ×4`);}break;}
+        case"rage":{const d=18;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);g.you={...g.you,hp:cl(g.you.hp-4,0,g.you.maxHp)};doFlash("you",4);logs.push(`Ты 🔥→${en(target)}: −${d} (−4HP себе)`);break;}
         case"energy":{nob=2;logs.push("Ты ⚡: +2ОД на след. ход");break;}
         case"trap":{g.you={...g.you,trap:true};logs.push("Ты 🪤: Ловушка установлена");break;}
         case"counter":{g.you={...g.you,counter:true};logs.push("Ты ↩️: Контрудар готов");break;}
-        case"double":{const d=8;[target].forEach(t=>{if(g[t].hp>0){g[t]={...g[t],hp:cl(g[t].hp-d,0,999)};doFlash(t,d);}});if(g[target].hp>0){g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);}logs.push(`Ты ⚔️⚔️→${en(target)}: −${d}×2`);break;}
-        case"revive":{if(g.alex.hp<=0){g.alex={...g.alex,hp:20};logs.push("✨ Алекс возрождён (20HP)!");setReviveAnim(true);setTimeout(()=>setReviveAnim(false),1500);addChat("alex","Я ещё в строю! Спасибо братец.");}else if(g.you.hp>0){g.you={...g.you,hp:cl(g.you.hp+15,0,g.you.maxHp)};logs.push("✨ Возрождение: +15HP себе");}break;}
+        case"double":{const d=8;const ot=["e1","e2"].find(k=>k!==target&&g[k].hp>0)??target;if(g[target].hp>0){g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);}if(ot!==target&&g[ot].hp>0){g[ot]={...g[ot],hp:cl(g[ot].hp-d,0,999)};doFlash(ot,d);}logs.push(`Ты ⚔️⚔️→${en(target)}+${en(ot)}: −${d} каждому`);break;}
+        case"revive":{if(g.alex.hp<=0){g.alex={...g.alex,hp:30};logs.push("✨ Алекс возрождён (30HP)!");setReviveAnim(true);setTimeout(()=>setReviveAnim(false),1500);addChat("alex","Я ещё в строю! Спасибо братец.");}break;}
       }
     }
     if(cr){
       if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};logs.push(`Комбо: команда +${cr.hp}HP`);}
       else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doFlash(cr.tgt,cr.hp);logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
     }
+    // Bug 1: remove joint from hand always
+    let newHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid));
+    if(jointCard){newHand=newHand.filter(c=>c.uid!==jointCard.uid);}
     if(spyCard){
-      const ec=["attack","poison","rage","shield"];const nc={uid:nuid(),type:ec[rnd(ec.length)],flipIn:true};
-      setHand(h=>[...h.filter(c=>c.uid!==spyCard.uid),nc]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);logs.push(`🔍 Шпионаж: скопировал карту врага`);
-    }else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)),...drawN(played.length)]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
+      newHand=newHand.filter(c=>c.uid!==spyCard.uid);
+      const{cards:[sc],deck:d2,cycle:c2}=drawFromDeck(1,capturedDeck,capturedCycle);
+      capturedDeck=d2;capturedCycle=c2;
+      newHand=[...newHand,sc];logs.push(`🔍 Шпионаж: взял карту из колоды`);
+    }
+    setHand(newHand);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
     setPlayed([]);setSpy(null);
     if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doFlash(jointTarget,d);logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
@@ -629,18 +655,24 @@ export default function App(){
     const ar=await alexTurnAPI(g,0,lastMsg,allyLow);addChat("alex",ar.message);setLastMsg("");
     for(const a of(ar.actions??[]).slice(0,1)){
       const st=targ=>{if(targ&&g[targ]?.hp>0)return targ;return["e1","e2"].find(k=>g[k].hp>0)??null;};
-      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=7;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){g.alex={...g.alex,hp:cl(g.alex.hp+8,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +8HP");}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +10HP");}
+      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
     const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
-    setOd(cl(1+nob,1,3));setOdBank(0);
+    setOd(cl(2+nob,2,4));setOdBank(0);
+    setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);
+    // Draw 1 card at end of turn
+    {const curHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid));
+    const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capturedDeck,capturedCycle);
+    if(curHand.length>=5){setPendingDrawCard(drawn);setSharedDeck(d3);setFatigueCycle(c3);}
+    else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setSharedDeck(d3);setFatigueCycle(c3);}}
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Оба упали. Отличная работа.");}
     else if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
-    else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase("player");}
-    else{setTurn(t=>t+1);setPhase("player");}
+    else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
+    else{setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
     setLoad(false);
   };
 
@@ -671,11 +703,14 @@ export default function App(){
     const r=await alexChatAPI(msg,gs);addChat("alex",r);setLoad(false);
   };
   const restart=()=>{
-    _uid=0;setGs(initGs());setHand(drawN(HAND_SIZE));setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setPlayed([]);setJC(null);setJR(false);
-    setJointTarget(null);setSpy(null);setPhase("player");setWinner(null);setLog([]);
-    setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(1);setOdBank(0);
+    const gi=createGameInit();
+    setGs(initGs());setHand(gi.hand);setSharedDeck(gi.deck);setFatigueCycle(gi.fatigueCycle);
+    setPendingDrawCard(null);setMulliganMarked(new Set());
+    setPlayed([]);setJC(null);setJR(false);setJointTarget(null);setSpy(null);
+    setPhase("mulligan");setWinner(null);setLog([]);
+    setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(2);setOdBank(0);
     setLastMsg("");setComboGlow(null);setPreview(null);
-    setChat([{from:"alex",text:"Снова. Попробуй комбо 🔥+☠️ или засаду 🪤+⚔️!"}]);
+    setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
   };
 
   const isP=phase==="player"&&!loading;
@@ -737,14 +772,18 @@ export default function App(){
           <div style={{display:"flex",alignItems:"center",gap:16}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <span style={{fontSize:11,color:"#6a5030",fontFamily:"Georgia,serif",marginRight:4}}>ОЧКИ ДЕЙСТВИЯ</span>
-              {Array.from({length:3},(_,i)=><Crystal key={i} active={i<cl(od-usedOd,0,3)}/>)}
+              {Array.from({length:4},(_,i)=><Crystal key={i} active={i<cl(od-usedOd,0,4)}/>)}
               <span style={{fontSize:13,color:"#c8a060",fontFamily:"Georgia,serif",marginLeft:4,fontWeight:700}}>
-                {cl(od-usedOd,0,3)}/{od}</span>
+                {cl(od-usedOd,0,4)}/{od}</span>
+            </div>
+            <div style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif",display:"flex",gap:8}}>
+              <span>🃏 {sharedDeck.length} в колоде</span>
+              {fatigueCycle>1&&<span style={{color:"#e05252"}}>😓 Цикл {fatigueCycle}</span>}
             </div>
             <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
               color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
               animation:phase==="busy"?"pulse 1s infinite":undefined}}>
-              {phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":"■ КОНЕЦ"}</div>
+              {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}</div>
           </div>
         </div>
 
@@ -753,12 +792,12 @@ export default function App(){
           {/* LEFT — units */}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <div style={{fontSize:10,letterSpacing:2,color:"#5a2020",fontFamily:"Georgia,serif",marginBottom:2}}>ПРОТИВНИКИ</div>
-            <UnitCard name={en("e1")} sub="агрессивный" hp={gs.e1.hp} maxHp={MHP.e1} bar="#e05252" ring="#e05252" flash={flash.e1} poison={gs.e1.poison} dead={gs.e1.hp<=0} shake={shaking==="e1"}/>
-            <UnitCard name={en("e2")} sub="хитрая" hp={gs.e2.hp} maxHp={MHP.e2} bar="#a03070" ring="#a03070" flash={flash.e2} poison={gs.e2.poison} dead={gs.e2.hp<=0} shake={shaking==="e2"}/>
+            <UnitCard name={en("e1")} sub="агрессивный" hp={gs.e1.hp} maxHp={MHP.e1} bar="#e05252" ring="#e05252" flash={flash.e1} poison={gs.e1.poison} bleed={gs.e1.bleed} dead={gs.e1.hp<=0} shake={shaking==="e1"}/>
+            <UnitCard name={en("e2")} sub="хитрая" hp={gs.e2.hp} maxHp={MHP.e2} bar="#a03070" ring="#a03070" flash={flash.e2} poison={gs.e2.poison} bleed={gs.e2.bleed} dead={gs.e2.hp<=0} shake={shaking==="e2"}/>
             <div style={{height:1,background:"rgba(200,160,80,0.1)",margin:"4px 0"}}/>
             <div style={{fontSize:10,letterSpacing:2,color:"#1a3040",fontFamily:"Georgia,serif"}}>СОЮЗНИКИ</div>
-            <UnitCard name="Алекс" sub="напарник (1ОД)" hp={gs.alex.hp} maxHp={MHP.alex} bar="#4caf82" ring="#4caf82" flash={flash.alex} poison={gs.alex.poison} dead={gs.alex.hp<=0} shake={shaking==="alex"} reviving={reviveAnim}/>
-            <UnitCard name="Ты" hp={gs.you.hp} maxHp={MHP.you} bar="#4c7fe0" ring="#4c7fe0" flash={flash.you} poison={gs.you.poison} dead={gs.you.hp<=0} shake={shaking==="you"}/>
+            <UnitCard name="Алекс" sub="напарник (1ОД)" hp={gs.alex.hp} maxHp={MHP.alex} bar="#4caf82" ring="#4caf82" flash={flash.alex} poison={gs.alex.poison} bleed={gs.alex.bleed} dead={gs.alex.hp<=0} shake={shaking==="alex"} reviving={reviveAnim}/>
+            <UnitCard name="Ты" hp={gs.you.hp} maxHp={MHP.you} bar="#4c7fe0" ring="#4c7fe0" flash={flash.you} poison={gs.you.poison} bleed={gs.you.bleed} dead={gs.you.hp<=0} shake={shaking==="you"}/>
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
               borderRadius:8,padding:"8px 10px",marginTop:4}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
@@ -873,6 +912,96 @@ export default function App(){
           </div>
         </div>
       </div>
+
+      {/* Mulligan overlay */}
+      {phase==="mulligan"&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",display:"flex",
+          alignItems:"center",justifyContent:"center",zIndex:99,backdropFilter:"blur(12px)",animation:"fadeIn 0.3s"}}>
+          <div style={{background:"linear-gradient(135deg,#0e0a06,#180e04)",
+            border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"40px 50px",textAlign:"center",
+            boxShadow:"0 0 60px rgba(200,120,20,0.3)",maxWidth:600}}>
+            <div style={{fontSize:20,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
+              color:"#c8901c",marginBottom:8}}>МАЛЛИГАН</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:20,fontFamily:"Georgia,serif"}}>
+              Выбери до 2 карт для замены ({mulliganMarked.size}/2)
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:24,flexWrap:"wrap"}}>
+              {hand.map(card=>{
+                const def=CARDS[card.type];const marked=mulliganMarked.has(card.uid);
+                return <div key={card.uid} onClick={()=>{
+                  setMulliganMarked(s=>{const ns=new Set(s);if(ns.has(card.uid))ns.delete(card.uid);else if(ns.size<2)ns.add(card.uid);return ns;});
+                }} style={{cursor:"pointer",border:`2px solid ${marked?"#c8901c":"rgba(200,160,80,0.2)"}`,
+                  borderRadius:8,padding:"8px 12px",background:marked?"rgba(200,144,28,0.15)":"rgba(0,0,0,0.4)",
+                  transition:"all 0.15s",transform:marked?"translateY(-6px)":"none"}}>
+                  <div style={{fontSize:18}}>{def.e}</div>
+                  <div style={{fontSize:10,color:def.c,fontFamily:"Georgia,serif",marginTop:4}}>{def.n}</div>
+                  {marked&&<div style={{fontSize:9,color:"#c8901c",marginTop:2}}>✓ заменить</div>}
+                </div>;
+              })}
+            </div>
+            <button onClick={()=>{
+              let deck=[...sharedDeck];let cycle=fatigueCycle;
+              const kept=hand.filter(c=>!mulliganMarked.has(c.uid));
+              const{cards:replacements,deck:d2,cycle:c2}=drawFromDeck(mulliganMarked.size,deck,cycle);
+              setHand([...kept,...replacements]);
+              setSharedDeck(d2);setFatigueCycle(c2);
+              setMulliganMarked(new Set());setPhase("player");
+              addChat("alex","Бой начат! Удачи.");
+            }} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
+              border:"none",borderRadius:8,padding:"12px 36px",fontSize:12,fontWeight:700,letterSpacing:2,
+              cursor:"pointer",fontFamily:"Georgia,serif",boxShadow:"0 0 30px rgba(200,120,20,0.4)"}}>
+              НАЧАТЬ БОЙ ▶
+            </button>
+          </div>
+        </div>)}
+
+      {/* Overflow discard overlay */}
+      {phase==="overflow"&&pendingDrawCard&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",
+          alignItems:"center",justifyContent:"center",zIndex:99,backdropFilter:"blur(8px)",animation:"fadeIn 0.2s"}}>
+          <div style={{background:"linear-gradient(135deg,#0e0a06,#180e04)",
+            border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"36px 48px",textAlign:"center",
+            boxShadow:"0 0 50px rgba(200,120,20,0.3)",maxWidth:640}}>
+            <div style={{fontSize:18,fontWeight:900,letterSpacing:3,fontFamily:"Georgia,serif",
+              color:"#e09a3c",marginBottom:8}}>ПЕРЕПОЛНЕНИЕ РУКИ</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:6,fontFamily:"Georgia,serif"}}>
+              Рука полна (5 карт). Новая карта:
+            </div>
+            <div style={{display:"inline-block",border:"2px solid #c8901c",borderRadius:8,
+              padding:"10px 16px",background:"rgba(200,144,28,0.1)",marginBottom:16}}>
+              <div style={{fontSize:22}}>{CARDS[pendingDrawCard.type]?.e}</div>
+              <div style={{fontSize:11,color:CARDS[pendingDrawCard.type]?.c,fontFamily:"Georgia,serif",marginTop:4}}>
+                {CARDS[pendingDrawCard.type]?.n}
+              </div>
+            </div>
+            <div style={{fontSize:11,color:"#8a7050",marginBottom:18,fontFamily:"Georgia,serif"}}>
+              Выбери карту из руки для сброса:
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
+              {hand.map(card=>{
+                const def=CARDS[card.type];
+                return <div key={card.uid} onClick={()=>{
+                  setHand(h=>[...h.filter(c=>c.uid!==card.uid),{...pendingDrawCard,flipIn:true}]);
+                  setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
+                  setPendingDrawCard(null);setPhase("player");
+                }} style={{cursor:"pointer",border:"1.5px solid rgba(200,160,80,0.3)",
+                  borderRadius:8,padding:"8px 12px",background:"rgba(0,0,0,0.5)",
+                  transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-4px)"}
+                  onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+                  <div style={{fontSize:16}}>{def.e}</div>
+                  <div style={{fontSize:10,color:def.c,fontFamily:"Georgia,serif",marginTop:3}}>{def.n}</div>
+                </div>;
+              })}
+            </div>
+            <button onClick={()=>{
+              setPendingDrawCard(null);setPhase("player");
+            }} style={{background:"rgba(255,255,255,0.06)",color:"#6a5030",
+              border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,padding:"8px 20px",
+              fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              Сбросить новую карту
+            </button>
+          </div>
+        </div>)}
 
       {/* Game over */}
       {phase==="over"&&(
