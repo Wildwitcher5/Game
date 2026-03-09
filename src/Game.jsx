@@ -43,7 +43,7 @@ const ART = {
   energy:   "/assets/cards/energy.jpeg",
   revive:   "/assets/cards/revive.jpeg",
   poison:   "/assets/cards/poison.jpeg",
-  bleed:    "/assets/cards/bleed.jpeg",
+  bleed:    "/assets/cards/bleeding.jpeg",
 };
 
 /* ── API config — set VITE_ANTHROPIC_API_KEY in .env ───────────────────── */
