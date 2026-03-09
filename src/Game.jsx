@@ -79,7 +79,16 @@ const DECK_TEMPLATE = [
 ];
 const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
 const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
-function createGameInit(){_uid=0;const d=shuffle([...DECK_TEMPLATE]);const{cards:h,deck}=drawFromDeck(4,d,1);return{hand:h.map(c=>({...c,flipIn:false})),deck,fatigueCycle:1};}
+const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
+function createGameInit(){
+  _uid=0;
+  const d=shuffle([...DECK_TEMPLATE]);
+  const{cards:h,deck:d2,cycle:c2}=drawFromDeck(4,d,1);
+  const{types:e1h,deck:d3,cycle:c3}=drawRaw(3,d2,c2);
+  const{types:e2h,deck:d4,cycle:c4}=drawRaw(3,d3,c3);
+  const{types:alh,deck:d5,cycle:c5}=drawRaw(3,d4,c4);
+  return{hand:h.map(c=>({...c,flipIn:false})),deck:d5,fatigueCycle:c5,e1Hand:e1h,e2Hand:e2h,alexHand:alh};
+}
 
 const COMBOS = [
   {needs:["rage","poison"],    name:"Ядовитый огонь 🔥☠️",  bonus:(_,t)=>({tgt:t,hp:24,poison:4}), msg:"КОМБО: Ядовитый огонь!"},
@@ -516,8 +525,9 @@ export default function App(){
   const [preview,setPreview]=useState(null);
   const [enemyCard,setEnemyCard]=useState({e1:null,e2:null});
   const [reviveAnim,setReviveAnim]=useState(false);
-  const [alexHandCount]=useState(3);
-  const [enemyHandCounts]=useState({e1:4,e2:3});
+  const [e1Hand,setE1Hand]=useState(gameInit.e1Hand);
+  const [e2Hand,setE2Hand]=useState(gameInit.e2Hand);
+  const [alexHand,setAlexHand]=useState(gameInit.alexHand);
   const [lastActions,setLastActions]=useState({e1:"",e2:"",alex:""});
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
@@ -583,73 +593,94 @@ export default function App(){
     setLoad(false);
   };
 
-  /* ── Enemy turn ─────────────────────────────────────────────────────── */
-  // Enemy "card" system - enemies pick cards each turn
-  const ENEMY_CARDS = {
-    e1:["attack","attack","rage","shield","double","trap","poison"],
-    e2:["attack","poison","poison","counter","healMe","joint_e","shield"],
-  };
-  const enemyAct=(g,logs,t)=>{
+  /* ── Enemy turn — shared deck ──────────────────────────────────────── */
+  const enemyAct=(g,logs,t,e1hIn,e2hIn,deckIn,cycleIn)=>{
     let e1Card=null,e2Card=null;
     let ng={you:{...g.you},alex:{...g.alex},e1:{...g.e1},e2:{...g.e2}};
     const hits={};
     const hit=(k,d)=>{hits[k]=(hits[k]??0)+d;};
-    // Check combo: if both enemies alive and turn>3, chance of joint attack
+    let nd=[...deckIn],nc=cycleIn;
+    let newE1h=[...e1hIn],newE2h=[...e2hIn];
+
+    // Draw N card types from shared deck into a hand array
+    const drawInto=(hand,n)=>{
+      const h=[...hand];
+      for(let i=0;i<n;i++){if(nd.length===0){nd=shuffle([...DECK_TEMPLATE]);nc++;}h.push(nd.shift());}
+      return h;
+    };
+    // Pick one random card from hand, remove it, draw replacement
+    const pickCard=(hand)=>{
+      if(hand.length===0){if(nd.length===0){nd=shuffle([...DECK_TEMPLATE]);nc++;}return{card:nd.shift(),newHand:[]};}
+      const idx=rnd(hand.length);const card=hand[idx];
+      const remaining=hand.filter((_,i)=>i!==idx);
+      if(nd.length===0){nd=shuffle([...DECK_TEMPLATE]);nc++;}
+      return{card,newHand:[...remaining,nd.shift()]};
+    };
+
+    // Apply an enemy's card: reuses player card types with enemy-appropriate interpretation
+    const applyEnemyCard=(card,actor)=>{
+      const name=actor==="e1"?en("e1"):en("e2");
+      const allyKey=actor==="e1"?"e2":"e1";
+      const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";
+      // Basic attack with trap/counter check
+      const basicAtk=(target,dmg,emoji="⚔️")=>{
+        let d=dmg;
+        if(target==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-10,0,999)};hit(actor,10);logs.push(`🪤 Ловушка! ${name} −10HP`);d=0;}
+        if(target==="you"&&ng.you.counter&&d>0){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
+        if(d>0){ng[target]={...ng[target],hp:cl(ng[target].hp-d,0,ng[target].maxHp)};hit(target,d);logs.push(`${name} ${emoji}→${target==="you"?"тебя":"Алекса"}: −${d}`);}
+      };
+      switch(card){
+        case"shield": ng[actor]={...ng[actor],hp:cl(ng[actor].hp+10,0,ng[actor].maxHp)};logs.push(`${name} 🛡️: +10HP`);break;
+        case"healAlex":
+          if(ng[allyKey].hp>0){ng[allyKey]={...ng[allyKey],hp:cl(ng[allyKey].hp+12,0,ng[allyKey].maxHp)};logs.push(`${name} 💉→${en(allyKey)}: +12HP`);}
+          else basicAtk(tgt,8);break;
+        case"revive":
+          if(ng[allyKey].hp<=0){ng[allyKey]={...ng[allyKey],hp:30};logs.push(`${name} ✨ возродил ${en(allyKey)} (30HP)!`);}
+          else basicAtk(tgt,8);break;
+        case"trap": ng[actor]={...ng[actor],trap:true};logs.push(`${name} 🪤: Ловушка!`);break;
+        case"counter": ng[actor]={...ng[actor],counter:true};logs.push(`${name} ↩️: Контрудар готов`);break;
+        case"poison":
+          if(ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`${name} ☠️→${tgt==="you"?"тебя":"Алекса"}: яд`);}
+          else basicAtk(tgt,8);break;
+        case"bleed": ng[tgt]={...ng[tgt],bleed:(ng[tgt].bleed??0)+4};logs.push(`${name} 🩸→${tgt==="you"?"тебя":"Алекса"}: кровотечение`);break;
+        case"rage":{let d=18;
+          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-10,0,999)};hit(actor,10);logs.push(`🪤 Ловушка! ${name} −10HP`);d=0;}
+          if(tgt==="you"&&ng.you.counter&&d>0){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
+          if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name} 🔥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
+          ng[actor]={...ng[actor],hp:cl(ng[actor].hp-4,0,999)};logs.push(`${name} ярость: −4HP себе`);break;}
+        case"double":{const t2=tgt==="you"?"alex":"you";
+          basicAtk(tgt,8,"⚔️⚔️");
+          if(ng[t2].hp>0){ng[t2]={...ng[t2],hp:cl(ng[t2].hp-8,0,ng[t2].maxHp)};hit(t2,8);logs.push(`${name} ⚔️→${t2==="you"?"тебя":"Алекса"}: −8`);}break;}
+        case"joint":
+          if(ng[allyKey].hp>0){let d=18;
+            if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
+            if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name}+${en(allyKey)}💥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}}
+          else basicAtk(tgt,8);break;
+        case"spy": newE1h=actor==="e1"?drawInto(newE1h,1):newE1h;newE2h=actor==="e2"?drawInto(newE2h,1):newE2h;logs.push(`${name} 🔍: доп. карта`);break;
+        case"energy": newE1h=actor==="e1"?drawInto(newE1h,1):newE1h;newE2h=actor==="e2"?drawInto(newE2h,1):newE2h;logs.push(`${name} ⚡: доп. карта`);break;
+        default: basicAtk(tgt,10);
+      }
+    };
+
+    // Joint combo attack (both alive, turn>3, 25% chance)
     const bothAlive=ng.e1.hp>0&&ng.e2.hp>0;
     const doCombo=bothAlive&&t>3&&rnd(4)===0;
     if(doCombo){
-      const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";
-      e1Card="joint";e2Card="joint";
-      const d=22;
-      let finalD=d;
-      if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);finalD=0;}
-      if(finalD>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-finalD,0,ng[tgt].maxHp)};hit(tgt,finalD);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Алекса"}: −${finalD}!`);}
+      const r1=pickCard(newE1h);newE1h=r1.newHand;e1Card=r1.card;
+      const r2=pickCard(newE2h);newE2h=r2.newHand;e2Card=r2.card;
+      const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";let d=22;
+      if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);d=0;}
+      if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Алекса"}: −${d}!`);}
     } else {
-      // E1 turn
-      if(ng.e1.hp>0){
-        const pool=ENEMY_CARDS.e1;
-        const card=pool[rnd(pool.length)];
-        e1Card=card;
-        const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";
-        if(card==="shield"){ng.e1={...ng.e1,hp:cl(ng.e1.hp+10,0,ng.e1.maxHp)};logs.push(`Страж 🛡️: +10HP`);}
-        else if(card==="trap"){ng.e1={...ng.e1,trap:true};logs.push("Страж 🪤: Ловушка!");}
-        else if(card==="poison"&&ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`Страж ☠️→${tgt==="you"?"тебя":"Алекса"}: яд`);}
-        else{
-          let dmg=card==="rage"?20:card==="double"?8:12;
-          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-10,0,999)};hit("e1",10);logs.push(`🪤 Ловушка! Страж −10HP`);}
-          if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-dmg,0,999)};hit("e1",dmg);logs.push(`↩️ Контрудар! Страж −${dmg}HP`);dmg=0;}
-          if(dmg>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-dmg,0,ng[tgt].maxHp)};hit(tgt,dmg);logs.push(`Страж ${card==="rage"?"🔥":card==="double"?"⚔️⚔️":"⚔️"}→${tgt==="you"?"тебя":"Алекса"}: −${dmg}`);}
-          if(card==="double"&&dmg>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-8,0,ng[tgt].maxHp)};hit(tgt,8);logs.push(`Страж ⚔️→ второй удар: −8`);}
-        }
-      }
-      // E2 turn
-      if(ng.e2.hp>0){
-        const pool=ENEMY_CARDS.e2;
-        const card=pool[rnd(pool.length)];
-        e2Card=card;
-        const tgt=rnd(2)===0?"you":"alex";
-        if(card==="shield"){ng.e2={...ng.e2,hp:cl(ng.e2.hp+10,0,ng.e2.maxHp)};logs.push(`Тень 🛡️: +10HP`);}
-        else if(card==="healMe"){ng.e1.hp>0&&(ng.e1={...ng.e1,hp:cl(ng.e1.hp+12,0,ng.e1.maxHp)});logs.push("Тень 💉→Стражу: +12HP");}
-        else if(card==="counter"){ng.e2={...ng.e2,counter:true};logs.push("Тень ↩️: Контрудар готов");}
-        else if(card==="poison"&&ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`Тень ☠️→${tgt==="you"?"тебя":"Алекса"}: яд`);}
-        else if(card==="joint_e"&&ng.e1.hp>0){
-          let d=18;
-          if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-d,0,999)};hit("e2",d);logs.push(`↩️ Контрудар! Тень −${d}HP`);d=0;}
-          if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`Тень+Страж💥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
-        } else {
-          let d=10;
-          if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-10,0,999)};hit("e2",10);logs.push(`🪤 Ловушка! Тень −10HP`);}
-          if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e2={...ng.e2,hp:cl(ng.e2.hp-d,0,999)};hit("e2",d);logs.push(`↩️ Контрудар! Тень −${d}HP`);d=0;}
-          if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`Тень ⚔️→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
-        }
-      }
+      if(ng.e1.hp>0){const r=pickCard(newE1h);e1Card=r.card;newE1h=r.newHand;applyEnemyCard(r.card,"e1");}
+      if(ng.e2.hp>0){const r=pickCard(newE2h);e2Card=r.card;newE2h=r.newHand;applyEnemyCard(r.card,"e2");}
     }
     // Poison + bleed ticks
     for(const k of["you","alex","e1","e2"]){
       if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-5,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −5HP`);hit(k,5);}
       if(ng[k]?.bleed>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-3,0,ng[k].maxHp),bleed:ng[k].bleed-1};logs.push(`🩸 Кровь(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −3HP`);hit(k,3);}
     }
-    return{ng,hits,e1Card,e2Card};
+    return{ng,hits,e1Card,e2Card,newE1h,newE2h,deck:nd,cycle:nc};
   };
 
   /* ── Skip ───────────────────────────────────────────────────────────── */
@@ -661,19 +692,30 @@ export default function App(){
     let g={you:{...gs.you},alex:{...gs.alex},e1:{...gs.e1},e2:{...gs.e2}};
     const logs=[];
     const ar=await alexTurnAPI(g,0,"",false);addChat("alex",ar.message);
+    let capDeck=[...sharedDeck];let capCycle=fatigueCycle;
+    let newAlexH=[...alexHand];
     for(const a of(ar.actions??[]).slice(0,1)){
+      // Remove one card from Alex's hand matching action type, draw replacement
+      const alexMap={attack:["attack","double","rage","bleed"],shield:["shield","counter","trap"],heal:["healAlex","revive","energy"]};
+      const pool=alexMap[a.type]??["attack"];
+      const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
+      if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capDeck,capCycle);capDeck=nd;capCycle=ncy;newAlexH=[...newAlexH,nc];}
       if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
       else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
-    const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
+    const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
+    capDeck=eDeck;capCycle=eCycle;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
-    // Draw 1 card at end of skip turn
-    {let capDeck=[...sharedDeck];let capCycle=fatigueCycle;
-    const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capDeck,capCycle);
-    if(hand.length>=5){setPendingDrawCard(drawn);setSharedDeck(d3);setFatigueCycle(c3);}
-    else{setHand(h=>[...h,drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setSharedDeck(d3);setFatigueCycle(c3);}}
+    setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
+    // Draw 1 card for player at end of skip turn
+    {const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capDeck,capCycle);
+    capDeck=d3;capCycle=c3;
+    if(hand.length>=5){setPendingDrawCard(drawn);}
+    else{setHand(h=>[...h,drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
+    setSharedDeck(capDeck);setFatigueCycle(capCycle);}
     if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
     else if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Победа!");}
     else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
@@ -739,22 +781,31 @@ export default function App(){
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
     const ar=await alexTurnAPI(g,0,lastMsg,allyLow);addChat("alex",ar.message);setLastMsg("");
+    let newAlexH=[...alexHand];
     for(const a of(ar.actions??[]).slice(0,1)){
+      const alexMap={attack:["attack","double","rage","bleed"],shield:["shield","counter","trap"],heal:["healAlex","revive","energy"]};
+      const pool=alexMap[a.type]??["attack"];
+      const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
+      if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capturedDeck,capturedCycle);capturedDeck=nd;capturedCycle=ncy;newAlexH=[...newAlexH,nc];}
       const st=targ=>{if(targ&&g[targ]?.hp>0)return targ;return["e1","e2"].find(k=>g[k].hp>0)??null;};
       if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
       else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
-    const{ng,hits:eh,e1Card,e2Card}=enemyAct(g,logs,turn);setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
+    const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
+    capturedDeck=eDeck;capturedCycle=eCycle;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
     setOd(cl(2+nob,2,4));setOdBank(0);
-    setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);
-    // Draw 1 card at end of turn
+    setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
+    // Draw 1 card for player at end of turn
     {const curHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid));
     const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capturedDeck,capturedCycle);
-    if(curHand.length>=5){setPendingDrawCard(drawn);setSharedDeck(d3);setFatigueCycle(c3);}
-    else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);setSharedDeck(d3);setFatigueCycle(c3);}}
+    capturedDeck=d3;capturedCycle=c3;
+    if(curHand.length>=5){setPendingDrawCard(drawn);}
+    else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
+    setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);}
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Оба упали. Отличная работа.");}
     else if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
     else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
@@ -796,6 +847,7 @@ export default function App(){
   const restart=()=>{
     const gi=createGameInit();
     setGs(initGs());setHand(gi.hand);setSharedDeck(gi.deck);setFatigueCycle(gi.fatigueCycle);
+    setE1Hand(gi.e1Hand);setE2Hand(gi.e2Hand);setAlexHand(gi.alexHand);
     setPendingDrawCard(null);setMulliganMarked(new Set());
     setPlayed([]);setJC(null);setJR(false);setJointTarget(null);setSpy(null);
     setPhase("mulligan");setWinner(null);setLog([]);
@@ -903,7 +955,7 @@ export default function App(){
                     )}
                   </div>
                 </div>
-                {!isDead&&<CardBackRow count={enemyHandCounts[key]}/>}
+                {!isDead&&<CardBackRow count={key==="e1"?e1Hand.length:e2Hand.length}/>}
                 {isDead&&<div style={{position:"absolute",inset:0,borderRadius:10,
                   display:"flex",alignItems:"center",justifyContent:"center",
                   background:"rgba(0,0,0,0.4)",pointerEvents:"none",zIndex:3}}>
@@ -947,7 +999,7 @@ export default function App(){
                   )}
                 </div>
               </div>
-              {gs.alex.hp>0&&<CardBackRow count={alexHandCount}/>}
+              {gs.alex.hp>0&&<CardBackRow count={alexHand.length}/>}
               {gs.alex.hp<=0&&<div style={{position:"absolute",inset:0,borderRadius:10,
                 display:"flex",alignItems:"center",justifyContent:"center",
                 background:"rgba(0,0,0,0.5)",pointerEvents:"none"}}>
