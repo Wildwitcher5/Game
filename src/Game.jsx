@@ -30,6 +30,7 @@ const COMBO_ARTS = {
 };
 const getComboArt = n => COMBO_ARTS[n] ?? COMBO_ART;
 const CARD_BACK = "/assets/backcard.png";
+const FATIGUE_ICON = "/assets/fatigue.png";
 const ART = {
   attack:   "/assets/cards/attack.jpeg",
   rage:     "/assets/cards/rage.jpeg",
@@ -776,9 +777,23 @@ export default function App(){
               <span style={{fontSize:13,color:"#c8a060",fontFamily:"Georgia,serif",marginLeft:4,fontWeight:700}}>
                 {cl(od-usedOd,0,4)}/{od}</span>
             </div>
-            <div style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif",display:"flex",gap:8}}>
-              <span>🃏 {sharedDeck.length} в колоде</span>
-              {fatigueCycle>1&&<span style={{color:"#e05252"}}>😓 Цикл {fatigueCycle}</span>}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif"}}>🃏 {sharedDeck.length}</span>
+              <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",
+                borderRadius:6,border:`1px solid ${fatigueCycle>1?"rgba(224,82,82,0.35)":"rgba(200,160,80,0.1)"}`,
+                background:fatigueCycle>1?"rgba(224,82,82,0.08)":"rgba(0,0,0,0.2)",
+                transition:"all 0.3s"}}>
+                <img src={FATIGUE_ICON} alt="" style={{width:22,height:22,objectFit:"contain",
+                  opacity:fatigueCycle>1?1:0.25,
+                  filter:fatigueCycle>1?"drop-shadow(0 0 5px rgba(224,82,82,0.7))":"none",
+                  transition:"all 0.3s"}}/>
+                <div style={{fontFamily:"Georgia,serif",lineHeight:1.1}}>
+                  <div style={{fontSize:8,color:fatigueCycle>1?"#a04040":"#4a3010",letterSpacing:1}}>ИЗНУРЕНИЕ</div>
+                  <div style={{fontSize:11,fontWeight:700,color:fatigueCycle>1?"#e05252":"#3a2808"}}>
+                    {fatigueCycle>1?`Цикл ${fatigueCycle} · −${fatigueCycle===2?3:fatigueCycle===3?6:10}HP/🃏`:`Цикл 1`}
+                  </div>
+                </div>
+              </div>
             </div>
             <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
               color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
