@@ -21,7 +21,7 @@ const CR = "/assets/card_cr.png";
 /*    public/assets/cards/energy.jpg                                           */
 /*    public/assets/cards/revive.jpg                                           */
 /*    public/assets/cards/poison.jpg                                           */
-const BG        = "/assets/bg.jpg";
+const BG        = "/assets/bg.jpeg";
 const COMBO_ART = "/assets/Combo.jpeg";
 const COMBO_ARTS = {
   "Ядовитый огонь 🔥☠️": "/assets/piosonrage.jpeg",
@@ -31,19 +31,19 @@ const COMBO_ARTS = {
 const getComboArt = n => COMBO_ARTS[n] ?? COMBO_ART;
 const CARD_BACK = "/assets/backcard.png";
 const ART = {
-  attack:   "/assets/cards/attack.jpg",
-  rage:     "/assets/cards/rage.jpg",
-  shield:   "/assets/cards/shield.jpg",
-  joint:    "/assets/cards/joint.jpg",
-  trap:     "/assets/cards/trap.jpg",
-  double:   "/assets/cards/double.jpg",
-  spy:      "/assets/cards/spy.jpg",
-  counter:  "/assets/cards/counter.jpg",
+  attack:   "/assets/cards/attack.jpeg",
+  rage:     "/assets/cards/rage.jpeg",
+  shield:   "/assets/cards/shied.jpeg",
+  joint:    "/assets/cards/joint.jpeg",
+  trap:     "/assets/cards/trap.jpeg",
+  double:   "/assets/cards/double.jpeg",
+  spy:      "/assets/cards/spy.jpeg",
+  counter:  "/assets/cards/counter.jpeg",
   healAlex: "/assets/cards/heal.jpeg",
-  energy:   "/assets/cards/energy.jpg",
-  revive:   "/assets/cards/revive.jpg",
-  poison:   "/assets/cards/poison.jpg",
-  bleed:    "/assets/cards/bleed.jpg",
+  energy:   "/assets/cards/energy.jpeg",
+  revive:   "/assets/cards/revive.jpeg",
+  poison:   "/assets/cards/poison.jpeg",
+  bleed:    "/assets/cards/bleed.jpeg",
 };
 
 /* ── API config — set VITE_ANTHROPIC_API_KEY in .env ───────────────────── */
