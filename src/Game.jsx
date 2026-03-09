@@ -76,7 +76,9 @@ const DECK_TEMPLATE = [
   "shield","shield","healAlex","revive",
   "poison","bleed","rage","joint",
   "spy","energy","trap","counter",
+  "attack","shield","poison","bleed",
 ];
+const fpCycle=c=>c===1?0:c===2?3:c===3?6:10;
 const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
 const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
 const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
@@ -671,9 +673,10 @@ export default function App(){
       const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";let d=22;
       if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);d=0;}
       if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Алекса"}: −${d}!`);}
+      const fdJ=fpCycle(cycleIn);if(fdJ>0){if(ng.e1.hp>0){ng.e1={...ng.e1,hp:cl(ng.e1.hp-fdJ,0,ng.e1.maxHp)};hit("e1",fdJ);logs.push(`Страж 😓 изнурение: −${fdJ}HP`);}if(ng.e2.hp>0){ng.e2={...ng.e2,hp:cl(ng.e2.hp-fdJ,0,ng.e2.maxHp)};hit("e2",fdJ);logs.push(`Тень 😓 изнурение: −${fdJ}HP`);}}
     } else {
-      if(ng.e1.hp>0){const r=pickCard(newE1h);e1Card=r.card;newE1h=r.newHand;applyEnemyCard(r.card,"e1");}
-      if(ng.e2.hp>0){const r=pickCard(newE2h);e2Card=r.card;newE2h=r.newHand;applyEnemyCard(r.card,"e2");}
+      if(ng.e1.hp>0){const r=pickCard(newE1h);e1Card=r.card;newE1h=r.newHand;applyEnemyCard(r.card,"e1");const fd1=fpCycle(cycleIn);if(fd1>0&&ng.e1.hp>0){ng.e1={...ng.e1,hp:cl(ng.e1.hp-fd1,0,ng.e1.maxHp)};hit("e1",fd1);logs.push(`Страж 😓 изнурение: −${fd1}HP`);}}
+      if(ng.e2.hp>0){const r=pickCard(newE2h);e2Card=r.card;newE2h=r.newHand;applyEnemyCard(r.card,"e2");const fd2=fpCycle(cycleIn);if(fd2>0&&ng.e2.hp>0){ng.e2={...ng.e2,hp:cl(ng.e2.hp-fd2,0,ng.e2.maxHp)};hit("e2",fd2);logs.push(`Тень 😓 изнурение: −${fd2}HP`);}}
     }
     // Poison + bleed ticks
     for(const k of["you","alex","e1","e2"]){
@@ -704,6 +707,7 @@ export default function App(){
       else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
+    {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
@@ -736,9 +740,10 @@ export default function App(){
     let g={you:{...gs.you},alex:{...gs.alex},e1:{...gs.e1},e2:{...gs.e2}};
     const logs=[];let nob=odBank;
     // Fatigue damage per card played
-    const fatiguePerCard=capturedCycle===1?0:capturedCycle===2?3:capturedCycle===3?6:10;
+    const fatiguePerCard=fpCycle(capturedCycle);
     const fatigueDmg=fatiguePerCard*(played.length+(jointCard?1:0)+(spyCard?1:0));
     if(fatigueDmg>0){g.you={...g.you,hp:cl(g.you.hp-fatigueDmg,0,g.you.maxHp)};doFlash("you",fatigueDmg);logs.push(`😓 Изнурение (цикл ${capturedCycle}): −${fatigueDmg}HP`);}
+
     const combo=detectCombo(played);let cr=null;
     if(combo){
       const tgts=played.filter(p=>CARDS[p.card.type].t==="enemy");
@@ -792,6 +797,7 @@ export default function App(){
       else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
+    {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
