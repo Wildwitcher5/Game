@@ -270,12 +270,12 @@ function Crystal({active,size=44}){
 
 /* ── OD cost pips on cards ─────────────────────────────────────────────────── */
 function OdPips({cost,canAfford,small=false}){
-  const sz=small?11:15;
+  const sz=small?14:20;
   return(
-    <div style={{display:"flex",gap:2,alignItems:"center",justifyContent:"center"}}>
+    <div style={{display:"flex",gap:3,alignItems:"center",justifyContent:"center"}}>
       {Array.from({length:cost},(_,i)=>(
-        <div key={i} style={{width:sz,height:sz,opacity:canAfford?1:0.25,
-          filter:canAfford?"drop-shadow(0 0 4px rgba(60,160,255,0.85))":"grayscale(1)",
+        <div key={i} style={{width:sz,height:sz,opacity:canAfford?1:0.3,
+          filter:canAfford?"drop-shadow(0 0 6px rgba(60,160,255,0.95))":"grayscale(1) brightness(0.5)",
           transition:"all 0.2s"}}>
           <img src={CR} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
         </div>
@@ -499,11 +499,57 @@ function Bubble({m}){
 }
 
 function LogLine({text}){
-  const c=text.includes("КОМБО")?"#e09a3c":text.includes("Ты")?"#6090e0":
-    text.includes("Алекс")?"#4caf82":text.includes("💥")?"#f0d060":
-    text.includes("Страж")||text.includes("Тень")?"#a04040":"#5a4a30";
-  return <div style={{fontSize:10,color:c,padding:"2px 0",fontFamily:"Georgia,serif",
-    borderBottom:"1px solid rgba(255,255,255,0.03)",fontWeight:text.includes("КОМБО")?700:400}}>▸ {text}</div>;
+  let icon,color,fw=400;
+  if(text.includes("КОМБО")||text.includes("СТЕНА")||text.includes("НАТИСК")||text.includes("ЦЕПЬ")){
+    icon="✨";color="#e09a3c";fw=700;
+  } else if(text.includes("Алекс")||text.includes("СОВМЕСТНЫЙ")||text.includes("👥")){
+    icon="👥";color="#4caf82";
+  } else if(text.includes("изнурение")||text.includes("😓")){
+    icon="⚠️";color="#c06030";
+  } else if(text.includes("☠")&&(text.includes("Яд")||text.includes("тика"))||text.includes("Кровь")){
+    icon="☠️";color="#9060c0";
+  } else if(text.includes("🛡️")||text.includes("+10HP")||text.includes("+12HP")||text.includes("💉")){
+    icon="🛡️";color="#4c7fe0";
+  } else if(text.includes("Ты")){
+    icon="⚔️";color="#6090e0";
+  } else if(text.includes("Страж")||text.includes("Тень")||text.includes("ВРАГИ")){
+    icon="⚔️";color="#a04040";
+  } else {
+    icon="▸";color="#5a4a30";
+  }
+  return(
+    <div style={{display:"flex",gap:6,alignItems:"flex-start",fontSize:11,color,
+      padding:"3px 0",fontFamily:"Georgia,serif",
+      borderBottom:"1px solid rgba(255,255,255,0.03)",fontWeight:fw,lineHeight:1.45}}>
+      <span style={{flexShrink:0,minWidth:16,textAlign:"center"}}>{icon}</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+/* ── Status effects badges (poison / bleed ticks) ─────────────────────────── */
+function EffectBadges({poison,bleed}){
+  if(!poison&&!bleed)return null;
+  return(
+    <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+      {poison>0&&(
+        <div style={{display:"flex",alignItems:"center",gap:3,
+          background:"rgba(123,198,126,0.13)",border:"1px solid rgba(123,198,126,0.35)",
+          borderRadius:5,padding:"2px 7px",animation:poison===1?"pulse 1s infinite":undefined}}>
+          <span style={{fontSize:13}}>☠️</span>
+          <span style={{fontSize:11,color:"#7bc67e",fontFamily:"Georgia,serif",fontWeight:700}}>{poison}</span>
+        </div>
+      )}
+      {bleed>0&&(
+        <div style={{display:"flex",alignItems:"center",gap:3,
+          background:"rgba(204,51,68,0.13)",border:"1px solid rgba(204,51,68,0.35)",
+          borderRadius:5,padding:"2px 7px",animation:bleed===1?"pulse 1s infinite":undefined}}>
+          <span style={{fontSize:13}}>🩸</span>
+          <span style={{fontSize:11,color:"#cc3344",fontFamily:"Georgia,serif",fontWeight:700}}>{bleed}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Main App ─────────────────────────────────────────────────────────────── */
@@ -1042,11 +1088,10 @@ export default function App(){
                         color:isDead?"#333":"#d4c4a0",textDecoration:isDead?"line-through":"none"}}>
                         {name}</span>
                       {sub&&<span style={{fontSize:9,color:"#6a5030"}}>{sub}</span>}
-                      {g.poison>0&&<span style={{fontSize:10,color:"#7bc67e"}}>☠×{g.poison}</span>}
-                      {g.bleed>0&&<span style={{fontSize:10,color:"#cc3344"}}>🩸×{g.bleed}</span>}
                     </div>
                     <HpBar hp={g.hp} maxHp={MHP[key]} color={bar} flash={flash[key]}/>
-                    {lastActions[key]&&!isDead&&(
+                    <EffectBadges poison={g.poison} bleed={g.bleed}/>
+                    {lastActions[key]&&!isDead&&!lastActions[key].includes("изнурение")&&(
                       <div style={{fontSize:9,color:"#5a4030",marginTop:4,fontFamily:"Georgia,serif",
                         fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {lastActions[key]}
@@ -1088,15 +1133,53 @@ export default function App(){
                       background:gs.alex.hp<=0?"rgba(100,0,0,0.3)":"rgba(76,175,130,0.15)",
                       color:gs.alex.hp<=0?"#aa4444":"#4caf82",fontFamily:"Georgia,serif"}}>
                       {gs.alex.hp<=0?"павший":"жив"}</span>
-                    {gs.alex.poison>0&&<span style={{fontSize:10,color:"#7bc67e"}}>☠×{gs.alex.poison}</span>}
-                    {gs.alex.bleed>0&&<span style={{fontSize:10,color:"#cc3344"}}>🩸×{gs.alex.bleed}</span>}
                   </div>
                   <HpBar hp={gs.alex.hp} maxHp={MHP.alex} color="#4caf82" flash={flash.alex}/>
-                  {lastActions.alex&&(
+                  <EffectBadges poison={gs.alex.poison} bleed={gs.alex.bleed}/>
+                  {lastActions.alex&&!lastActions.alex.includes("изнурение")&&(
                     <div style={{fontSize:9,color:"#2a5038",marginTop:4,fontFamily:"Georgia,serif",fontStyle:"italic"}}>
                       {lastActions.alex}</div>
                   )}
                 </div>
+                {/* Trade zone — compact icon or expanded offer */}
+                {gs.alex.hp>0&&(
+                  <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center"}}>
+                    {tradeOffer?(
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,
+                        animation:"fadeIn 0.3s",padding:"6px 10px",
+                        background:"rgba(76,175,130,0.08)",border:"1px solid rgba(76,175,130,0.35)",
+                        borderRadius:8}}>
+                        <div style={{fontSize:10,color:"#4caf82",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>
+                          💱 {CARDS[tradeOffer.type]?.e} {CARDS[tradeOffer.type]?.n}
+                        </div>
+                        <div style={{display:"flex",gap:5}}>
+                          <button onClick={()=>{
+                            setAlexHand(h=>h.filter((_,i)=>i!==tradeOffer.idx));
+                            setHand(h=>[...h,{uid:nuid(),type:tradeOffer.type,flipIn:true}]);
+                            setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
+                            setCoopScore(s=>s+1);setTradeOffer(null);alexSpeak("trade_accepted",gs);
+                          }} style={{background:"linear-gradient(135deg,#1a4028,#2a7048)",color:"#7be0b0",
+                            border:"none",borderRadius:5,padding:"4px 10px",fontSize:10,fontWeight:700,
+                            cursor:"pointer",fontFamily:"Georgia,serif"}}>Принять ↔</button>
+                          <button onClick={()=>{setTradeOffer(null);alexSpeak("trade_declined",gs);}}
+                            style={{background:"rgba(255,255,255,0.05)",color:"#6a5030",
+                            border:"1px solid rgba(200,160,80,0.2)",borderRadius:5,padding:"4px 10px",
+                            fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif"}}>✕</button>
+                        </div>
+                      </div>
+                    ):(
+                      <div title="Передать карту Алексу — открой карту в руке и выбери «Передать»"
+                        style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",
+                        borderRadius:7,border:"1px solid rgba(76,175,130,0.18)",
+                        background:"rgba(76,175,130,0.05)",cursor:"help",opacity:passedCard?0.35:1}}>
+                        <span style={{fontSize:14}}>🤝</span>
+                        <span style={{fontSize:9,color:"#3a7048",fontFamily:"Georgia,serif"}}>
+                          {passedCard?"отдал":"передать"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {gs.alex.hp>0&&<CardBackRow count={alexHand.length}/>}
               {gs.alex.hp<=0&&<div style={{position:"absolute",inset:0,borderRadius:10,
@@ -1116,9 +1199,9 @@ export default function App(){
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
               borderRadius:8,padding:"8px 10px",flex:1}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:160,overflowY:"auto"}}>
-                {log.length===0?<div style={{fontSize:10,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
-                  :log.map((l,i)=><LogLine key={i} text={l}/>)}
+              <div style={{maxHeight:180,overflowY:"auto"}}>
+                {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
+                  :log.slice(-20).map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
               </div>
             </div>
@@ -1233,10 +1316,11 @@ export default function App(){
 
           <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
 
-          {/* HP */}
+          {/* HP + player effects */}
           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:150}}>
             <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>HP ИГРОКА</div>
             <HpBar hp={gs.you.hp} maxHp={MHP.you} color="#4c7fe0" flash={flash.you}/>
+            <EffectBadges poison={gs.you.poison} bleed={gs.you.bleed}/>
           </div>
 
           <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
@@ -1278,19 +1362,20 @@ export default function App(){
 
           {/* Buttons */}
           <button onClick={skipTurn} disabled={!isP} style={{
-            background:"rgba(200,160,80,0.06)",color:isP?"#8a7040":"#2a1808",
-            border:"1px solid rgba(200,160,80,0.2)",borderRadius:7,
-            padding:"8px 14px",fontSize:10,fontWeight:700,cursor:isP?"pointer":"default",
-            fontFamily:"Georgia,serif"}}>
-            ПРОПУСК +1ОД
+            background:"rgba(200,160,80,0.04)",color:isP?"#7a6035":"#2a1808",
+            border:"1px solid rgba(200,160,80,0.15)",borderRadius:7,
+            padding:"7px 12px",fontSize:9,fontWeight:600,cursor:isP?"pointer":"default",
+            fontFamily:"Georgia,serif",letterSpacing:0.5,opacity:isP?1:0.4}}>
+            ПРОПУСК<br/>+1 ОД
           </button>
           <button onClick={endTurn} disabled={!canEnd} style={{
-            background:canEnd?"linear-gradient(135deg,#8a5010,#c87820)":"rgba(255,255,255,0.04)",
-            color:canEnd?"#fff":"#2a1808",border:"none",borderRadius:7,
-            padding:"10px 22px",fontSize:12,fontWeight:700,cursor:canEnd?"pointer":"default",
-            fontFamily:"Georgia,serif",letterSpacing:0.5,
-            boxShadow:canEnd?"0 0 20px rgba(200,120,30,0.4)":"none"}}>
-            {loading?"⏳":"ЗАВЕРШИТЬ ХОД →"}
+            background:canEnd?"linear-gradient(135deg,#7a3e00,#d4841a)":"rgba(255,255,255,0.04)",
+            color:canEnd?"#fff":"#2a1808",border:canEnd?"1px solid rgba(220,140,40,0.5)":"none",
+            borderRadius:8,padding:"12px 28px",fontSize:13,fontWeight:900,
+            cursor:canEnd?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:1,
+            boxShadow:canEnd?"0 0 28px rgba(210,130,20,0.55),0 2px 8px rgba(0,0,0,0.5)":"none",
+            transition:"all 0.2s"}}>
+            {loading?"⏳ ЖДЁМ…":"ЗАВЕРШИТЬ ХОД ▶"}
           </button>
         </div>
 
@@ -1396,31 +1481,6 @@ export default function App(){
             </button>
           </div>
         </div>)}
-
-      {/* Trade offer HUD */}
-      {tradeOffer&&phase==="player"&&(
-        <div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",
-          zIndex:60,background:"linear-gradient(135deg,rgba(10,25,18,0.97),rgba(5,15,10,0.99))",
-          border:"1px solid rgba(76,175,130,0.5)",borderRadius:12,padding:"14px 22px",
-          boxShadow:"0 0 30px rgba(76,175,130,0.25)",animation:"fadeIn 0.25s",
-          display:"flex",alignItems:"center",gap:14}}>
-          <div style={{fontSize:13,color:"#4caf82",fontFamily:"Georgia,serif"}}>
-            💱 Алекс предлагает обмен: <strong>{CARDS[tradeOffer.type]?.e} {CARDS[tradeOffer.type]?.n}</strong>
-          </div>
-          <button onClick={()=>{
-            setAlexHand(h=>h.filter((_,i)=>i!==tradeOffer.idx));
-            setHand(h=>[...h,{uid:nuid(),type:tradeOffer.type,flipIn:true}]);
-            setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
-            setCoopScore(s=>s+1);setTradeOffer(null);alexSpeak("trade_accepted",gs);
-          }} style={{background:"linear-gradient(135deg,#1a4028,#2a7048)",color:"#7be0b0",
-            border:"none",borderRadius:6,padding:"7px 14px",fontSize:11,fontWeight:700,
-            cursor:"pointer",fontFamily:"Georgia,serif"}}>Принять</button>
-          <button onClick={()=>{setTradeOffer(null);alexSpeak("trade_declined",gs);}}
-            style={{background:"rgba(255,255,255,0.05)",color:"#6a5030",
-            border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,padding:"7px 14px",
-            fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif"}}>Отклонить</button>
-        </div>
-      )}
 
       {/* Game over */}
       {phase==="over"&&(
