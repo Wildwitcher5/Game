@@ -99,6 +99,7 @@ const COMBOS = [
   {needs:["shield","healAlex"],name:"Крепость 🛡️💉",        bonus:()=>({self:true,hp:8}),           msg:"КОМБО: Крепость!"},
   {needs:["trap","attack"],    name:"Засада 🪤⚔️",           bonus:(_,t)=>({tgt:t,hp:14}),          msg:"КОМБО: Засада!"},
   {needs:["energy","rage"],    name:"Шквал ⚡🔥",            bonus:(_,t)=>({tgt:t,hp:16}),          msg:"КОМБО: Шквал!"},
+  {needs:["poison","bleed"],   name:"Кровавый яд ☠️🩸",     bonus:(_,t)=>({tgt:t,hp:8,poison:2}),  msg:"КОМБО: Кровавый яд!"},
 ];
 
 let _uid=0;
@@ -107,11 +108,13 @@ const rnd=n=>Math.floor(Math.random()*n);
 const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const en=k=>k==="e1"?"Страж":"Тень";
 
+// Subset matching: played cards must contain all needed types (may have extras)
 function detectCombo(played){
-  const types=played.map(p=>p.card.type).sort();
+  const types=played.map(p=>p.card.type);
   for(const c of COMBOS){
-    const need=[...c.needs].sort();
-    if(need.length===types.length&&need.every((v,i)=>v===types[i]))return c;
+    const avail=[...types];let match=true;
+    for(const n of c.needs){const i=avail.indexOf(n);if(i===-1){match=false;break;}avail.splice(i,1);}
+    if(match)return c;
   }
   return null;
 }
@@ -338,7 +341,7 @@ function CardBackRow({count}){
 }
 
 /* ── Card preview overlay ─────────────────────────────────────────────────── */
-function CardPreview({card,gs,onApply,onTarget,onClose,isP,odLeft,alreadySel}){
+function CardPreview({card,gs,onApply,onTarget,onPass,onClose,isP,odLeft,alreadySel,canPass}){
   if(!card)return null;
   const def=CARDS[card.type];
   const W=200, H=W*1.5;
@@ -410,6 +413,12 @@ function CardPreview({card,gs,onApply,onTarget,onClose,isP,odLeft,alreadySel}){
               border:"1px solid #e05252",borderRadius:7,padding:"10px",fontSize:12,fontWeight:700,
               cursor:"pointer",fontFamily:"Georgia,serif"}}>
               Отменить выбор</button>
+          )}
+          {canPass&&(
+            <button onClick={onPass} style={{background:"linear-gradient(135deg,#1a4028,#2a7048)",color:"#7be0b0",
+              border:"1px solid rgba(76,175,130,0.4)",borderRadius:7,padding:"10px",fontSize:12,fontWeight:700,
+              cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              📤 Передать Алексу (0 ОД)</button>
           )}
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.05)",color:"#9a8060",
             border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,padding:"8px",fontSize:11,
@@ -531,6 +540,11 @@ export default function App(){
   const [e2Hand,setE2Hand]=useState(gameInit.e2Hand);
   const [alexHand,setAlexHand]=useState(gameInit.alexHand);
   const [lastActions,setLastActions]=useState({e1:"",e2:"",alex:""});
+  const [typing,setTyping]=useState(false);
+  const [tradeOffer,setTradeOffer]=useState(null); // {type,idx}
+  const [passedCard,setPassedCard]=useState(false);
+  const [drawCooldown,setDrawCooldown]=useState(0);
+  const [cooperationScore,setCoopScore]=useState(0);
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
 
@@ -556,6 +570,16 @@ export default function App(){
     setPreview(card);
   };
 
+  const handlePassToAlex=card=>{
+    if(passedCard||gs.alex.hp<=0)return;
+    setHand(h=>h.filter(c=>c.uid!==card.uid));
+    setAlexHand(h=>[...h,card.type]);
+    setPassedCard(true);
+    setCoopScore(s=>s+1);
+    setPreview(null);
+    alexSpeak("card_received",gs);
+  };
+
   const handleApply=card=>{
     const def=CARDS[card.type];
     const sel=played.find(p=>p.card.uid===card.uid);
@@ -577,6 +601,45 @@ export default function App(){
     if(odLeft<def.od)return;
     if(card.type==="joint"){setJC(card);setPreview(null);askAlexJoint(tgt);}
     else{setPlayed(pl=>[...pl,{card,target:tgt}]);setPreview(null);}
+  };
+
+  /* ── alexSpeak — situational Alex lines ────────────────────────────── */
+  const alexSpeak=async(eventType,g)=>{
+    setTyping(true);
+    const ctxMap={
+      card_received:"Игрок передал тебе карту из руки. Поблагодари кратко.",
+      trade_offer:"Предложи игроку обменяться картой — скажи что хочешь отдать.",
+      trade_accepted:"Игрок принял обмен. Отреагируй позитивно.",
+      trade_declined:"Игрок отказался. Скажи понимающе.",
+      low_hp:"Кто-то из нас почти погиб. Скажи тревожно.",
+      enemy_low_hp:"Враг почти убит. Подбодри кратко.",
+      took_heavy_hit:"Игрок получил сильный удар. Скажи сочувственно.",
+      victory:"Победа! Поздравь кратко.",
+      defeat:"Проигрыш. Скажи утешение.",
+      joint_combo:"Боевой комбо с игроком! Скажи воодушевлённо.",
+    };
+    const fallbackMap={
+      card_received:"Отлично, пригодится!",
+      trade_offer:"Хочу предложить обмен — что думаешь?",
+      trade_accepted:"Договорились!",
+      trade_declined:"Ладно, понял.",
+      low_hp:"Держись, нам плохо!",
+      enemy_low_hp:"Добиваем его!",
+      took_heavy_hit:"Ты в порядке? Держись!",
+      victory:"Победа! Отличная работа!",
+      defeat:"Бывает. В следующий раз.",
+      joint_combo:"Вот это удар! Работаем как команда!",
+    };
+    try{
+      const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:80,
+          system:`Алекс, напарник. По-русски, 1 предложение. А${g?.alex?.hp??"?"}HP И${g?.you?.hp??"?"}HP. ${ctxMap[eventType]??"Скажи что-нибудь."}`,
+          messages:[{role:"user",content:"Отреагируй."}]})});
+      const d=await r.json();
+      addChat("alex",d.content?.[0]?.text??fallbackMap[eventType]??"Понял.");
+    }catch{addChat("alex",fallbackMap[eventType]??"Понял.");}
+    setTyping(false);
   };
 
   /* ── Alex joint ─────────────────────────────────────────────────────── */
@@ -720,10 +783,11 @@ export default function App(){
     if(hand.length>=5){setPendingDrawCard(drawn);}
     else{setHand(h=>[...h,drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
     setSharedDeck(capDeck);setFatigueCycle(capCycle);}
-    if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
-    else if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Победа!");}
-    else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
-    else{setTurn(t=>t+1);setOd(2+nb);setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
+    setDrawCooldown(0);setPassedCard(false);
+    if(g.you.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
+    else if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
+    else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
+    else{setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
     setLastActions({
       e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
       e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
@@ -770,9 +834,9 @@ export default function App(){
       if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};logs.push(`Комбо: команда +${cr.hp}HP`);}
       else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doFlash(cr.tgt,cr.hp);logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
     }
-    // Bug 1: remove joint from hand always
+    // Only remove joint card if Alex agreed; otherwise keep it in hand
     let newHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid));
-    if(jointCard){newHand=newHand.filter(c=>c.uid!==jointCard.uid);}
+    if(jointCard&&jointReady){newHand=newHand.filter(c=>c.uid!==jointCard.uid);}
     if(spyCard){
       newHand=newHand.filter(c=>c.uid!==spyCard.uid);
       const{cards:[sc],deck:d2,cycle:c2}=drawFromDeck(1,capturedDeck,capturedCycle);
@@ -787,6 +851,7 @@ export default function App(){
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
     const ar=await alexTurnAPI(g,0,lastMsg,allyLow);addChat("alex",ar.message);setLastMsg("");
     let newAlexH=[...alexHand];
+    const alexActionType=ar.actions?.[0]?.type??"";
     for(const a of(ar.actions??[]).slice(0,1)){
       const alexMap={attack:["attack","double","rage","bleed"],shield:["shield","counter","trap"],heal:["healAlex","revive","energy"]};
       const pool=alexMap[a.type]??["attack"];
@@ -797,14 +862,39 @@ export default function App(){
       else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
       else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
     }
+    // Alex-player joint combos
+    {const playerTypes=played.map(p=>p.card.type);let jcFired=false;
+    if(playerTypes.includes("shield")&&alexActionType==="shield"){
+      g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};
+      logs.push("🛡️🛡️ СТЕНА ЩИТОВ: команда +10HP!");setCoopScore(s=>s+1);jcFired=true;
+    }else if((playerTypes.includes("attack")||playerTypes.includes("rage"))&&alexActionType==="attack"){
+      const t3=played.find(p=>p.card.type==="attack"||p.card.type==="rage")?.target??["e1","e2"].find(k=>g[k].hp>0);
+      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-12,0,999)};doFlash(t3,12);logs.push(`⚔️⚔️ ДВОЙНОЙ НАТИСК: ${en(t3)} −12 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
+    }else if(playerTypes.includes("joint")&&jointReady&&alexActionType==="attack"){
+      const t3=jointTarget??["e1","e2"].find(k=>g[k].hp>0);
+      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-8,0,999)};doFlash(t3,8);logs.push(`💥⚔️ ЖИВАЯ ЦЕПЬ: ${en(t3)} −8 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
+    }
+    if(jcFired)setTimeout(()=>alexSpeak("joint_combo",g),400);}
     {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
-    setOd(cl(2+nob,2,4));setOdBank(0);
+    setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);setPassedCard(false);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
+    // Situational alexSpeak (non-blocking)
+    {const youHpNow=g.you.hp,alexHpNow=g.alex.hp;
+    const enemyLow=["e1","e2"].some(k=>g[k].hp>0&&g[k].hp<MHP[k]*0.3);
+    const heavyHit=(eh.you??0)>=15;
+    if(heavyHit)setTimeout(()=>alexSpeak("took_heavy_hit",g),500);
+    else if(youHpNow<MHP.you*0.25||alexHpNow<MHP.alex*0.25)setTimeout(()=>alexSpeak("low_hp",g),500);
+    else if(enemyLow)setTimeout(()=>alexSpeak("enemy_low_hp",g),500);}
+    // Trade offer (30% chance)
+    if(newAlexH.length>0&&!tradeOffer&&Math.random()<0.3){
+      const oi=rnd(newAlexH.length);setTradeOffer({type:newAlexH[oi],idx:oi});
+      setTimeout(()=>alexSpeak("trade_offer",g),800);
+    }
     // Draw 1 card for player at end of turn
     {const curHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid));
     const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capturedDeck,capturedCycle);
@@ -812,8 +902,8 @@ export default function App(){
     if(curHand.length>=5){setPendingDrawCard(drawn);}
     else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
     setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);}
-    if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");addChat("alex","Оба упали. Отличная работа.");}
-    else if(g.you.hp<=0){setWinner("enemy");setPhase("over");addChat("alex","Нас накрыли.");}
+    if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
+    else if(g.you.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
     else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
     else{setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
     setLastActions({
@@ -859,6 +949,7 @@ export default function App(){
     setPhase("mulligan");setWinner(null);setLog([]);
     setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(2);setOdBank(0);
     setLastMsg("");setComboGlow(null);setPreview(null);
+    setTyping(false);setTradeOffer(null);setPassedCard(false);setDrawCooldown(0);setCoopScore(0);
     setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
   };
 
@@ -904,8 +995,10 @@ export default function App(){
       {/* Preview overlay */}
       {preview&&<CardPreview card={preview} gs={gs} isP={isP}
         odLeft={previewOdLeft} alreadySel={previewAlreadySel}
+        canPass={isP&&gs.alex.hp>0&&!passedCard&&!previewAlreadySel}
         onApply={()=>handleApply(preview)}
         onTarget={t=>handleTarget(preview,t)}
+        onPass={()=>handlePassToAlex(preview)}
         onClose={()=>setPreview(null)}/>}
 
       <div style={{position:"relative",zIndex:1,maxWidth:1100,margin:"0 auto",padding:"10px 14px 6px"}}>
@@ -1056,6 +1149,16 @@ export default function App(){
             </div>
             <div style={{flex:1,overflowY:"auto",marginBottom:10,minHeight:120,maxHeight:280}}>
               {chat.map((m,i)=><Bubble key={i} m={m}/>)}
+              {typing&&(
+                <div style={{marginBottom:10,display:"flex",gap:7,alignItems:"flex-start",animation:"fadeIn 0.25s"}}>
+                  <div style={{width:26,height:26,borderRadius:"50%",background:"#4caf82",
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,
+                    color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>А</div>
+                  <div style={{fontSize:18,color:"#4caf82",background:"rgba(76,175,130,0.1)",
+                    padding:"6px 14px",borderRadius:8,border:"1px solid rgba(76,175,130,0.25)",
+                    animation:"pulse 0.8s infinite",letterSpacing:4}}>···</div>
+                </div>
+              )}
               <div ref={chatEnd}/>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
@@ -1263,8 +1366,8 @@ export default function App(){
                 {CARDS[pendingDrawCard.type]?.n}
               </div>
             </div>
-            <div style={{fontSize:11,color:"#8a7050",marginBottom:18,fontFamily:"Georgia,serif"}}>
-              Выбери карту из руки для сброса:
+            <div style={{fontSize:11,color:"#8a7050",marginBottom:6,fontFamily:"Georgia,serif"}}>
+              Выбери карту из руки для сброса (−2 ОД следующего хода):
             </div>
             <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
               {hand.map(card=>{
@@ -1272,6 +1375,7 @@ export default function App(){
                 return <div key={card.uid} onClick={()=>{
                   setHand(h=>[...h.filter(c=>c.uid!==card.uid),{...pendingDrawCard,flipIn:true}]);
                   setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
+                  setDrawCooldown(2);
                   setPendingDrawCard(null);setPhase("player");
                 }} style={{cursor:"pointer",border:"1.5px solid rgba(200,160,80,0.3)",
                   borderRadius:8,padding:"8px 12px",background:"rgba(0,0,0,0.5)",
@@ -1283,14 +1387,40 @@ export default function App(){
               })}
             </div>
             <button onClick={()=>{
+              setDrawCooldown(1);
               setPendingDrawCard(null);setPhase("player");
             }} style={{background:"rgba(255,255,255,0.06)",color:"#6a5030",
               border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,padding:"8px 20px",
               fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-              Сбросить новую карту
+              Сбросить новую карту (−1 ОД)
             </button>
           </div>
         </div>)}
+
+      {/* Trade offer HUD */}
+      {tradeOffer&&phase==="player"&&(
+        <div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",
+          zIndex:60,background:"linear-gradient(135deg,rgba(10,25,18,0.97),rgba(5,15,10,0.99))",
+          border:"1px solid rgba(76,175,130,0.5)",borderRadius:12,padding:"14px 22px",
+          boxShadow:"0 0 30px rgba(76,175,130,0.25)",animation:"fadeIn 0.25s",
+          display:"flex",alignItems:"center",gap:14}}>
+          <div style={{fontSize:13,color:"#4caf82",fontFamily:"Georgia,serif"}}>
+            💱 Алекс предлагает обмен: <strong>{CARDS[tradeOffer.type]?.e} {CARDS[tradeOffer.type]?.n}</strong>
+          </div>
+          <button onClick={()=>{
+            setAlexHand(h=>h.filter((_,i)=>i!==tradeOffer.idx));
+            setHand(h=>[...h,{uid:nuid(),type:tradeOffer.type,flipIn:true}]);
+            setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
+            setCoopScore(s=>s+1);setTradeOffer(null);alexSpeak("trade_accepted",gs);
+          }} style={{background:"linear-gradient(135deg,#1a4028,#2a7048)",color:"#7be0b0",
+            border:"none",borderRadius:6,padding:"7px 14px",fontSize:11,fontWeight:700,
+            cursor:"pointer",fontFamily:"Georgia,serif"}}>Принять</button>
+          <button onClick={()=>{setTradeOffer(null);alexSpeak("trade_declined",gs);}}
+            style={{background:"rgba(255,255,255,0.05)",color:"#6a5030",
+            border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,padding:"7px 14px",
+            fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif"}}>Отклонить</button>
+        </div>
+      )}
 
       {/* Game over */}
       {phase==="over"&&(
@@ -1304,6 +1434,11 @@ export default function App(){
               textShadow:`0 0 30px ${winner==="player"?"rgba(76,175,130,0.6)":"rgba(224,82,82,0.6)"}`}}>
               {winner==="player"?"ПОБЕДА":"ПОРАЖЕНИЕ"}</div>
             <div style={{fontSize:12,color:"#4a3010",marginBottom:8,fontFamily:"Georgia,serif"}}>Ход {turn}</div>
+            <div style={{display:"flex",gap:24,justifyContent:"center",marginBottom:18}}>
+              <div style={{fontSize:12,color:"#8a7050",fontFamily:"Georgia,serif"}}>
+                🤝 Слаженность команды: <span style={{color:"#4caf82",fontWeight:700}}>{cooperationScore}</span>
+              </div>
+            </div>
             <div style={{fontSize:13,color:"#8a7050",marginBottom:34,lineHeight:1.8,fontFamily:"Georgia,serif"}}>
               {winner==="player"?"Команда сработала. Отличная работа.":"Используй ловушки и контрудары."}</div>
             <button onClick={restart} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
