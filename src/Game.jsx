@@ -77,11 +77,21 @@ const DECK_TEMPLATE = [
   "poison","bleed","rage","joint",
   "spy","energy","trap","counter",
   "attack","shield","poison","bleed",
+  "attack","attack","double","shield",
+  "healAlex","poison","bleed","rage",
+  "joint","spy","energy","trap",
+  "counter","attack","shield","revive",
+  "poison","bleed","attack","double",
+];
+const RESHUFFLE_TEMPLATE = [
+  "attack","attack","shield","poison",
+  "bleed","rage","double","energy",
+  "joint","trap","counter","attack",
 ];
 const fpCycle=c=>c===1?0:c===2?3:c===3?6:10;
 const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
-const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
-const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...DECK_TEMPLATE]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
+const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
+const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
 function createGameInit(){
   _uid=0;
   const d=shuffle([...DECK_TEMPLATE]);
@@ -152,7 +162,7 @@ function UnitCard({name,sub,hp,maxHp,bar,ring,flash,poison,bleed,dead,shake,revi
       border:`1px solid ${reviving?"rgba(255,215,0,0.8)":dead?"rgba(255,255,255,0.04)":ring+"44"}`,
       borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center",
       position:"relative",
-      animation:reviving?"reviveGlow 1s":shake?"shake 0.35s":flash?"hitFlash 0.4s":undefined,
+      animation:reviving?"reviveGlow 1s":shake?"shake 0.5s":flash?"hitFlash 0.7s":undefined,
       boxShadow:reviving?"0 0 30px rgba(255,215,0,0.5)":dead?"none":`0 2px 12px rgba(0,0,0,0.5)`}}>
       <div style={{width:42,height:42,borderRadius:"50%",flexShrink:0,
         background:`radial-gradient(circle,${ring}44,rgba(0,0,0,0.7))`,
@@ -195,12 +205,12 @@ function GameCard({card,selected,dimmed,notEnoughOd,jointPending,comboWith,onPre
 
   return(
     <div style={{width:W,height:H,flexShrink:0,position:"relative",
-      animation:card.flipIn?"cardFrontIn 0.55s cubic-bezier(.4,0,.2,1) forwards":"cardPlay 0.25s both"}}>
+      animation:card.flipIn?"cardFrontIn 0.8s cubic-bezier(.4,0,.2,1) forwards":"cardPlay 0.8s both"}}>
 
       {/* Card back — shown first during flip */}
       {card.flipIn&&(
         <div style={{position:"absolute",inset:0,zIndex:20,borderRadius:8,overflow:"hidden",
-          animation:"cardBackOut 0.55s cubic-bezier(.4,0,.2,1) forwards",pointerEvents:"none"}}>
+          animation:"cardBackOut 0.8s cubic-bezier(.4,0,.2,1) forwards",pointerEvents:"none"}}>
           <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
         </div>
       )}
@@ -819,7 +829,7 @@ export default function App(){
     {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
-    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
@@ -859,7 +869,7 @@ export default function App(){
       const tgts=played.filter(p=>CARDS[p.card.type].t==="enemy");
       const ct=tgts.length>0?tgts[0].target:["e1","e2"].find(k=>g[k].hp>0);
       cr=combo.bonus(g,ct);logs.push(combo.msg);
-      setComboGlow(combo.name);setTimeout(()=>setComboGlow(null),2400);
+      setComboGlow(combo.name);setTimeout(()=>setComboGlow(null),5000);
     }
     for(const{card,target}of played){
       switch(card.type){
@@ -924,7 +934,7 @@ export default function App(){
     {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
-    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1700);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3400);g=ng;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
     for(const[k,d]of Object.entries(eh))doFlash(k,d);
     setGs(g);logs.forEach(addLog);
     setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);setPassedCard(false);
@@ -1022,7 +1032,7 @@ export default function App(){
         <div style={{position:"fixed",inset:0,zIndex:58,
           display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",
           background:"rgba(0,0,0,0.65)",animation:"fadeIn 0.15s"}}>
-          <div style={{position:"relative",animation:"comboFlash 0.7s cubic-bezier(.15,1.2,.3,1)"}}>
+          <div style={{position:"relative",animation:"comboFlash 2.5s cubic-bezier(.15,1.2,.3,1)"}}>
             <img src={getComboArt(comboGlow)} alt="" style={{width:500,height:330,objectFit:"cover",
               borderRadius:16,border:"3px solid #e09a3c",
               boxShadow:"0 0 100px rgba(224,154,60,1),0 0 200px rgba(200,80,0,0.5)"}}/>
@@ -1072,7 +1082,7 @@ export default function App(){
               <div key={key} style={{flex:1,background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
                 border:`1px solid ${isDead?"rgba(255,255,255,0.04)":ring+"44"}`,
                 borderRadius:10,padding:"10px 14px",position:"relative",
-                animation:shaking===key?"shake 0.35s":flash[key]?"hitFlash 0.4s":undefined,
+                animation:shaking===key?"shake 0.5s":flash[key]?"hitFlash 0.7s":undefined,
                 boxShadow:isDead?"none":`0 2px 12px rgba(0,0,0,0.5)`,
                 opacity:isDead?0.5:1,transition:"opacity 0.5s"}}>
                 <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
@@ -1118,7 +1128,7 @@ export default function App(){
             <div style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
               border:`1px solid ${gs.alex.hp<=0?"rgba(255,255,255,0.04)":"rgba(76,175,130,0.35)"}`,
               borderRadius:10,padding:"10px 14px",position:"relative",
-              animation:reviveAnim?"reviveGlow 1s":shaking==="alex"?"shake 0.35s":flash.alex?"hitFlash 0.4s":undefined,
+              animation:reviveAnim?"reviveGlow 1s":shaking==="alex"?"shake 0.5s":flash.alex?"hitFlash 0.7s":undefined,
               boxShadow:reviveAnim?"0 0 30px rgba(255,215,0,0.5)":gs.alex.hp<=0?"none":"0 2px 12px rgba(0,0,0,0.5)"}}>
               <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
                 <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
@@ -1282,7 +1292,7 @@ export default function App(){
                 const def=CARDS[p.card.type];
                 return <div key={p.card.uid} style={{fontSize:9,background:"rgba(200,154,60,0.15)",
                   border:`1px solid ${def.c}55`,borderRadius:5,padding:"3px 8px",
-                  color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.25s ${i*0.05}s both`}}>
+                  color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.8s ${i*0.1}s both`}}>
                   {def.e} {def.n}{p.target?` →${en(p.target)}`:""}
                 </div>;
               })}

@@ -40,8 +40,11 @@ button:not(:disabled):hover {
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  25%       { transform: translateX(-6px); }
-  75%       { transform: translateX(6px); }
+  15%       { transform: translateX(-8px); }
+  35%       { transform: translateX(8px); }
+  55%       { transform: translateX(-6px); }
+  75%       { transform: translateX(5px); }
+  90%       { transform: translateX(-3px); }
 }
 
 @keyframes comboPulse {
@@ -56,10 +59,12 @@ button:not(:disabled):hover {
 }
 
 @keyframes comboFlash {
-  0%   { opacity: 0; transform: scale(0.3) rotate(-4deg); }
-  45%  { opacity: 1; transform: scale(1.08) rotate(1.5deg); }
-  70%  { transform: scale(0.97) rotate(0deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  0%   { opacity: 0; transform: scale(0.2) rotate(-6deg); }
+  25%  { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  45%  { transform: scale(0.96) rotate(-1deg); }
+  60%  { transform: scale(1.05) rotate(0.5deg); }
+  80%  { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02) rotate(0deg); }
 }
 
 @keyframes enemyActIn {
@@ -81,12 +86,14 @@ button:not(:disabled):hover {
 
 @keyframes hitFlash {
   0%   { filter: brightness(1); }
-  30%  { filter: brightness(3) saturate(0); }
+  20%  { filter: brightness(4) saturate(0) contrast(1.5); }
+  55%  { filter: brightness(1.5) saturate(0.3); }
   100% { filter: brightness(1); }
 }
 
 @keyframes cardPlay {
-  0%   { opacity: 0; transform: translateY(20px); }
+  0%   { opacity: 0; transform: translateY(28px) scale(0.92); }
+  60%  { opacity: 1; transform: translateY(-4px) scale(1.03); }
   100% { opacity: 1; transform: none; }
 }
 
