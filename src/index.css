@@ -108,3 +108,8 @@ button:not(:disabled):hover {
   42%  { transform: scaleX(0); }
   100% { transform: scaleX(0); }
 }
+
+@keyframes arrowBounce {
+  0%, 100% { transform: translateY(0) rotate(var(--arrow-rotate, 0deg)); }
+  50%       { transform: translateY(-6px) rotate(var(--arrow-rotate, 0deg)); }
+}

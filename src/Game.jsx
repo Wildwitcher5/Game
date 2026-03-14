@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import "./index.css";
+import Tutorial from "./Tutorial.jsx";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -559,6 +560,7 @@ function EffectBadges({poison,bleed}){
 
 /* ── Main App ─────────────────────────────────────────────────────────────── */
 export default function App(){
+  const [showTutorial,setShowTutorial]=useState(()=>localStorage.getItem("tutorialDone")!=="true");
   const [gameInit]=useState(createGameInit);
   const [gs,setGs]=useState(initGs);
   const [hand,setHand]=useState(gameInit.hand);
@@ -1069,7 +1071,7 @@ export default function App(){
         </div>
 
         {/* ── Enemies row ──────────────────────────────────────────────────── */}
-        <div style={{display:"flex",gap:12,marginBottom:12}}>
+        <div data-tutorial="enemies" style={{display:"flex",gap:12,marginBottom:12}}>
           {[
             {key:"e1",name:en("e1"),sub:"агрессивный",bar:"#e05252",ring:"#e05252"},
             {key:"e2",name:en("e2"),sub:"хитрая",bar:"#a03070",ring:"#a03070"},
@@ -1122,7 +1124,7 @@ export default function App(){
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
 
             {/* Alex block */}
-            <div style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
+            <div data-tutorial="ally" style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
               border:`1px solid ${gs.alex.hp<=0?"rgba(255,255,255,0.04)":"rgba(76,175,130,0.35)"}`,
               borderRadius:10,padding:"10px 14px",position:"relative",
               animation:reviveAnim?"reviveGlow 1s":shaking==="alex"?"shake 0.5s":flash.alex?"hitFlash 0.7s":undefined,
@@ -1247,7 +1249,7 @@ export default function App(){
         </div>
 
         {/* ── Hand area ──────────────────────────────────────────────────────── */}
-        <div style={{background:"rgba(0,0,0,0.45)",border:"1px solid rgba(200,160,80,0.12)",
+        <div data-tutorial="hand" style={{background:"rgba(0,0,0,0.45)",border:"1px solid rgba(200,160,80,0.12)",
           borderRadius:10,padding:"10px 14px",marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",fontFamily:"Georgia,serif"}}>РУКА</div>
@@ -1302,7 +1304,7 @@ export default function App(){
           <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
 
           {/* AP crystals */}
-          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          <div data-tutorial="ap" style={{display:"flex",flexDirection:"column",gap:4}}>
             <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>ОЧКИ ДЕЙСТВИЯ</div>
             <div style={{display:"flex",gap:3,alignItems:"center"}}>
               {Array.from({length:od},(_,i)=><Crystal key={i} active={i<odLeft} size={28}/>)}
@@ -1313,7 +1315,7 @@ export default function App(){
           <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
 
           {/* Deck stack + Fatigue — center block */}
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div data-tutorial="deck" style={{display:"flex",alignItems:"center",gap:10}}>
             <DeckStack count={sharedDeck.length} fatigueCycle={fatigueCycle}/>
             <div title={`Цикл ${fatigueCycle}. ${fatigueCycle>1?`Каждая карта −${fatigueCycle===2?3:fatigueCycle===3?6:10}HP`:"Изнурения нет"}`}
               style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",
@@ -1577,6 +1579,9 @@ export default function App(){
           </div>
         </div>)}
 
+      {/* Tutorial overlay */}
+      {showTutorial&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+
       {/* Game over */}
       {phase==="over"&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",
@@ -1596,10 +1601,17 @@ export default function App(){
             </div>
             <div style={{fontSize:13,color:"#8a7050",marginBottom:34,lineHeight:1.8,fontFamily:"Georgia,serif"}}>
               {winner==="player"?"Команда сработала. Отличная работа.":"Используй ловушки и контрудары."}</div>
-            <button onClick={restart} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
-              border:"none",borderRadius:8,padding:"12px 36px",fontSize:12,fontWeight:700,letterSpacing:2,
-              cursor:"pointer",fontFamily:"Georgia,serif",boxShadow:"0 0 30px rgba(200,120,20,0.4)"}}>
-              ИГРАТЬ СНОВА</button>
+            <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+              <button onClick={restart} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
+                border:"none",borderRadius:8,padding:"12px 36px",fontSize:12,fontWeight:700,letterSpacing:2,
+                cursor:"pointer",fontFamily:"Georgia,serif",boxShadow:"0 0 30px rgba(200,120,20,0.4)"}}>
+                ИГРАТЬ СНОВА</button>
+              <button onClick={()=>{setShowTutorial(true);localStorage.removeItem("tutorialDone");}}
+                style={{background:"rgba(200,160,80,0.08)",color:"#8a7050",
+                border:"1px solid rgba(200,160,80,0.25)",borderRadius:8,padding:"12px 22px",fontSize:12,
+                cursor:"pointer",fontFamily:"Georgia,serif",letterSpacing:1}}>
+                ОБУЧЕНИЕ</button>
+            </div>
           </div>
         </div>)}
     </div>
