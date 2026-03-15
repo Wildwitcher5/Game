@@ -57,7 +57,6 @@ const API_KEY  = import.meta.env.VITE_ANTHROPIC_API_KEY ?? "";
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const MHP = { you:100, alex:100, e1:100, e2:100 };
-const HAND_SIZE = 4;
 
 const CARDS = {
   attack:  {e:"⚔️",  n:"АТАКА",        d:"−8 HP врагу",                              c:"#e05252", t:"enemy", od:1},
@@ -554,8 +553,8 @@ function EffectBadge({type,stacks,color,bg,border}){
       onMouseEnter={()=>setTip(true)} onMouseLeave={()=>setTip(false)}>
       <img src={type==="poison"?POISON_ICON:BLEED_ICON} alt=""
         className="effect-icon" data-effect={type} data-stacks={stacks}
-        style={{width:14,height:14,objectFit:"contain"}}/>
-      <span style={{fontSize:11,color,fontFamily:"Georgia,serif",fontWeight:700}}>{stacks}</span>
+        style={{width:36,height:36,objectFit:"contain"}}/>
+      <span style={{fontSize:14,color,fontFamily:"Georgia,serif",fontWeight:700}}>{stacks}</span>
       {tip&&(
         <div className="effect-tooltip">{tipText}</div>
       )}
@@ -610,8 +609,8 @@ export default function App(){
   const [typing,setTyping]=useState(false);
   const [tradeOffer,setTradeOffer]=useState(null); // {type,idx}
   const [tradeSel,setTradeSel]=useState(null); // uid of player card selected for trade
-  const [tradeRevealing,setTradeRevealing]=useState(false);
-  const [passedCard,setPassedCard]=useState(false);
+  const [tradeUsed,setTradeUsed]=useState(false);
+  const [thinking,setThinking]=useState({e1:false,e2:false,alex:false});
   const [drawCooldown,setDrawCooldown]=useState(0);
   const [cooperationScore,setCoopScore]=useState(0);
   const chatEnd=useRef(null);
@@ -656,12 +655,13 @@ export default function App(){
     animPlayingRef.current=true;setAnimating(true);
     const fn=animQueueRef.current.shift();
     await fn();
+    await dly(400);
     processQueue();
   };
   const showBanner=(text,color='#e8d090')=>{
     const el=document.createElement('div');el.className='event-banner';
     el.style.color=color;el.textContent=text;document.body.appendChild(el);
-    setTimeout(()=>el.remove(),2000);
+    setTimeout(()=>el.remove(),2500);
   };
   const showComboBanner=(name,imgSrc=null)=>{
     const el=document.createElement('div');el.className='combo-banner';
@@ -764,16 +764,23 @@ export default function App(){
   /* ── Alex joint ─────────────────────────────────────────────────────── */
   const askAlexJoint=async t=>{
     setJointTarget(t);setLoad(true);
-    try{
-      const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:100,
-          system:`Алекс, напарник. Игрок предлагает совместный удар по ${en(t)} (${gs[t].hp}HP). Твой HP: ${gs.alex.hp}. Ответь 1 коротким предложением. Скажи "готов" если да.`,
-          messages:[{role:"user",content:"Совместный удар?"}]})});
-      const d=await r.json();
-      const txt=d.content?.[0]?.text??"Готов.";
-      addChat("alex",txt);
-      setJR(txt.toLowerCase().includes("готов")||txt.toLowerCase().includes("да"));
-    }catch{addChat("alex","Готов. Бьём вместе.");setJR(true);}
+    setThinking(th=>({...th,alex:true}));
+    await dly(3000+rnd(6000));
+    setThinking(th=>({...th,alex:false}));
+    if(alexHand.includes("joint")){
+      addChat("alex","Готов. Бьём вместе!");setJR(true);
+    }else{
+      try{
+        const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:100,
+            system:`Алекс, напарник. Игрок предлагает совместный удар по ${en(t)} (${gs[t].hp}HP). Твой HP: ${gs.alex.hp}. Ответь 1 коротким предложением. Скажи "готов" если да.`,
+            messages:[{role:"user",content:"Совместный удар?"}]})});
+        const d=await r.json();
+        const txt=d.content?.[0]?.text??"Готов.";
+        addChat("alex",txt);
+        setJR(txt.toLowerCase().includes("готов")||txt.toLowerCase().includes("да"));
+      }catch{addChat("alex","Готов. Бьём вместе.");setJR(true);}
+    }
     setLoad(false);
   };
 
@@ -885,12 +892,15 @@ export default function App(){
       const pool=alexMap[a.type]??["attack"];
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capDeck,capCycle);capDeck=nd;capCycle=ncy;newAlexH=[...newAlexH,nc];}
-      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#ff6060');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"💚 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💚 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
     }
     {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const prevHpSk={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
+    setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
+    await dly(8000+rnd(27000));
+    setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
@@ -904,7 +914,7 @@ export default function App(){
     if(hand.length>=5){setPendingDrawCard(drawn);}
     else{setHand(h=>[...h,drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
     setSharedDeck(capDeck);setFatigueCycle(capCycle);}
-    setDrawCooldown(0);setPassedCard(false);
+    setDrawCooldown(0);setTradeUsed(false);
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
     else if(g.you.hp<=0&&g.alex.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
     else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
@@ -986,9 +996,9 @@ export default function App(){
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capturedDeck,capturedCycle);capturedDeck=nd;capturedCycle=ncy;newAlexH=[...newAlexH,nc];}
       const st=targ=>{if(targ&&g[targ]?.hp>0)return targ;return["e1","e2"].find(k=>g[k].hp>0)??null;};
-      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#ff6060');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"💚 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💚 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
     }
     // Alex-player joint combos
     {const playerTypes=played.map(p=>p.card.type);let jcFired=false;
@@ -1006,13 +1016,16 @@ export default function App(){
     if(jcFired)setTimeout(()=>alexSpeak("joint_combo",g),400);}
     {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const prevHp={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
+    setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
+    await dly(8000+rnd(27000));
+    setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
     for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${k==="e1"?en("e1"):en("e2")} −${d} HP`:`⚔ ${en("e1")||"Враг"} → ${k==="you"?"Ты":"Алекс"} −${d} HP`,'#ff9040');}
     for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHp[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
     setGs(g);logs.forEach(addLog);
-    setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);setPassedCard(false);
+    setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
     // Situational alexSpeak (non-blocking)
     {const youHpNow=g.you.hp,alexHpNow=g.alex.hp;
@@ -1035,8 +1048,8 @@ export default function App(){
     setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);}
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
     else if(g.you.hp<=0&&g.alex.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
-    else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
-    else{setTurn(t=>t+1);setPhase(pendingDrawCard?"overflow":"player");}
+    else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setTradeUsed(false);setPhase(pendingDrawCard?"overflow":"player");}
+    else{setTurn(t=>t+1);setTradeUsed(false);setPhase(pendingDrawCard?"overflow":"player");}
     setLastActions({
       e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
       e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
@@ -1080,7 +1093,8 @@ export default function App(){
     setPhase("mulligan");setWinner(null);setLog([]);
     setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(2);setOdBank(0);
     setLastMsg("");setComboGlow(null);setPreview(null);
-    setTyping(false);setTradeOffer(null);setTradeSel(null);setTradeRevealing(false);setPassedCard(false);setDrawCooldown(0);setCoopScore(0);
+    setTyping(false);setTradeOffer(null);setTradeSel(null);setTradeUsed(false);setDrawCooldown(0);setCoopScore(0);
+    deathLoggedRef.current=false;
     setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
   };
 
@@ -1137,19 +1151,27 @@ export default function App(){
           marginBottom:10,borderBottom:"1px solid rgba(200,160,80,0.2)",paddingBottom:8}}>
           <span style={{fontSize:20,fontWeight:900,letterSpacing:4,color:"#c8901c",
             fontFamily:"Georgia,serif",textShadow:"0 0 20px rgba(200,140,20,0.5)"}}>АЛЬЯНС</span>
-          <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
-            color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
-            animation:phase==="busy"?"pulse 1s infinite":undefined}}>
-            {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
+              color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
+              animation:phase==="busy"?"pulse 1s infinite":undefined}}>
+              {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
+            </div>
+            <button onClick={()=>{setShowTutorial(true);localStorage.removeItem("tutorialDone");}}
+              style={{background:"rgba(200,160,80,0.06)",color:"#6a5030",
+              border:"1px solid rgba(200,160,80,0.18)",borderRadius:5,padding:"4px 10px",
+              fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",letterSpacing:0.5}}>
+              ? обучение
+            </button>
           </div>
         </div>
 
         {/* ── Enemies row ──────────────────────────────────────────────────── */}
         <div data-tutorial="enemies" style={{display:"flex",gap:12,marginBottom:12}}>
           {[
-            {key:"e1",name:en("e1"),sub:"агрессивный",bar:"#e05252",ring:"#e05252"},
-            {key:"e2",name:en("e2"),sub:"хитрая",bar:"#a03070",ring:"#a03070"},
-          ].map(({key,name,sub,bar,ring})=>{
+            {key:"e1",name:en("e1"),bar:"#e05252",ring:"#e05252"},
+            {key:"e2",name:en("e2"),bar:"#a03070",ring:"#a03070"},
+          ].map(({key,name,bar,ring})=>{
             const g=gs[key];const isDead=g.hp<=0;
             return(
               <div key={key} data-entity={key} style={{flex:1,background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
@@ -1170,11 +1192,13 @@ export default function App(){
                       <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
                         color:isDead?"#333":"#d4c4a0",textDecoration:isDead?"line-through":"none"}}>
                         {name}</span>
-                      {sub&&<span style={{fontSize:9,color:"#6a5030"}}>{sub}</span>}
                     </div>
                     <HpBar hp={g.hp} maxHp={MHP[key]} color={bar} flash={flash[key]}/>
                     <EffectBadges poison={g.poison} bleed={g.bleed}/>
-                    {lastActions[key]&&!isDead&&!lastActions[key].includes("изнурение")&&(
+                    {thinking[key]&&!isDead&&(
+                      <div className="thinking-indicator" style={{marginTop:4}}>···</div>
+                    )}
+                    {lastActions[key]&&!isDead&&!lastActions[key].includes("изнурение")&&!thinking[key]&&(
                       <div style={{fontSize:9,color:"#5a4030",marginTop:4,fontFamily:"Georgia,serif",
                         fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {lastActions[key]}
@@ -1219,22 +1243,37 @@ export default function App(){
                   </div>
                   <HpBar hp={gs.alex.hp} maxHp={MHP.alex} color="#4caf82" flash={flash.alex}/>
                   <EffectBadges poison={gs.alex.poison} bleed={gs.alex.bleed}/>
-                  {lastActions.alex&&!lastActions.alex.includes("изнурение")&&(
+                  {thinking.alex&&gs.alex.hp>0&&(
+                    <div className="thinking-indicator" style={{marginTop:4}}>···</div>
+                  )}
+                  {lastActions.alex&&!lastActions.alex.includes("изнурение")&&!thinking.alex&&(
                     <div style={{fontSize:9,color:"#2a5038",marginTop:4,fontFamily:"Georgia,serif",fontStyle:"italic"}}>
                       {lastActions.alex}</div>
                   )}
                 </div>
-                {/* Trade indicator — modal shows when trade is offered */}
-                {tradeOffer&&gs.alex.hp>0&&(
-                  <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center"}}>
+                {/* Trade indicator / initiate button */}
+                <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center"}}>
+                  {tradeOffer&&gs.alex.hp>0?(
                     <div style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",
                       borderRadius:7,border:"1px solid rgba(76,175,130,0.45)",
                       background:"rgba(76,175,130,0.12)",animation:"pulse 1.2s infinite"}}>
                       <span style={{fontSize:14}}>💱</span>
                       <span style={{fontSize:9,color:"#4caf82",fontFamily:"Georgia,serif"}}>обмен!</span>
                     </div>
-                  </div>
-                )}
+                  ):isP&&!tradeUsed&&alexHand.length>0&&gs.alex.hp>0?(
+                    <button onClick={()=>{
+                      const idx=rnd(alexHand.length);
+                      setTradeOffer({type:alexHand[idx],idx});
+                      setTradeUsed(true);
+                      alexSpeak("trade_offer",gs);
+                    }} style={{background:"rgba(76,175,130,0.1)",color:"#4caf82",
+                      border:"1px solid rgba(76,175,130,0.35)",borderRadius:6,
+                      padding:"5px 9px",fontSize:9,cursor:"pointer",fontFamily:"Georgia,serif",
+                      letterSpacing:0.3}}>
+                      💱 обмен
+                    </button>
+                  ):null}
+                </div>
               </div>
               {gs.alex.hp>0&&<CardBackRow count={alexHand.length}/>}
               {gs.alex.hp<=0&&<div style={{position:"absolute",inset:0,borderRadius:10,
@@ -1254,7 +1293,7 @@ export default function App(){
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
               borderRadius:8,padding:"8px 10px",flex:1}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:180,overflowY:"auto"}}>
+              <div style={{maxHeight:120,overflowY:"auto"}}>
                 {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
                   :log.slice(-20).map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
@@ -1437,42 +1476,30 @@ export default function App(){
       {tradeOffer&&phase!=="mulligan"&&(
         <div style={{position:"fixed",inset:0,zIndex:75,display:"flex",alignItems:"center",
           justifyContent:"center",background:"rgba(0,0,0,0.7)",backdropFilter:"blur(6px)",
-          animation:"fadeIn 0.3s"}} onClick={()=>{if(!tradeRevealing){setTradeOffer(null);setTradeSel(null);alexSpeak("trade_declined",gs);}}}>
+          animation:"fadeIn 0.3s"}} onClick={()=>{setTradeOffer(null);setTradeSel(null);alexSpeak("trade_declined",gs);}}>
           <div style={{background:"linear-gradient(135deg,#0a1a12,#0e2018)",
             border:"1px solid rgba(76,175,130,0.4)",borderRadius:16,padding:"28px 36px",
             maxWidth:740,width:"90%",animation:"scaleIn 0.3s cubic-bezier(.15,1.2,.3,1)",
             boxShadow:"0 0 60px rgba(76,175,130,0.2)"}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:15,fontWeight:900,letterSpacing:3,color:"#4caf82",
-              fontFamily:"Georgia,serif",textAlign:"center",marginBottom:20}}>АЛЕКС ПРЕДЛАГАЕТ ОБМЕН</div>
+              fontFamily:"Georgia,serif",textAlign:"center",marginBottom:20}}>ОБМЕН КАРТАМИ</div>
             <div style={{display:"flex",gap:28,alignItems:"center",justifyContent:"center",marginBottom:24,flexWrap:"wrap"}}>
-              {/* Alex's card — back until revealed */}
+              {/* Alex's card — shown face-up immediately */}
               <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
                 <div style={{fontSize:10,color:"#3a7048",fontFamily:"Georgia,serif",letterSpacing:1}}>АЛЕКС ДАЁТ</div>
                 <div style={{width:100,height:150,borderRadius:8,overflow:"hidden",
-                  boxShadow:"0 0 20px rgba(76,175,130,0.4)",
-                  animation:tradeRevealing?"cardFrontIn 0.8s cubic-bezier(.4,0,.2,1) forwards":undefined,
-                  position:"relative"}}>
-                  {tradeRevealing&&(
-                    <div style={{position:"absolute",inset:0,zIndex:5,animation:"cardBackOut 0.8s cubic-bezier(.4,0,.2,1) forwards"}}>
-                      <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                    </div>
-                  )}
-                  {tradeRevealing?(
-                    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
-                      alignItems:"center",justifyContent:"center",
-                      background:`linear-gradient(135deg,${CARDS[tradeOffer.type]?.c}22,rgba(0,0,0,0.8))`,
-                      border:`2px solid ${CARDS[tradeOffer.type]?.c}88`,borderRadius:8}}>
-                      <div style={{fontSize:28}}>{CARDS[tradeOffer.type]?.e}</div>
-                      <div style={{fontSize:10,color:"#e8d090",fontFamily:"Georgia,serif",fontWeight:700,marginTop:6}}>
-                        {CARDS[tradeOffer.type]?.n}</div>
-                    </div>
-                  ):(
-                    <img src={CARD_BACK} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  )}
+                  boxShadow:"0 0 20px rgba(76,175,130,0.4)",position:"relative",
+                  background:`linear-gradient(135deg,${CARDS[tradeOffer.type]?.c}22,rgba(0,0,0,0.8))`,
+                  border:`2px solid ${CARDS[tradeOffer.type]?.c}88`,
+                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
+                  {ART[tradeOffer.type]
+                    ?<img src={ART[tradeOffer.type]} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.7}}/>
+                    :null}
+                  <div style={{position:"relative",fontSize:32,zIndex:1}}>{CARDS[tradeOffer.type]?.e}</div>
+                  <div style={{position:"relative",fontSize:10,color:"#e8d090",fontFamily:"Georgia,serif",fontWeight:700,zIndex:1,textAlign:"center",padding:"0 4px"}}>
+                    {CARDS[tradeOffer.type]?.n}</div>
                 </div>
-                <div style={{fontSize:9,color:"#2a5030",fontFamily:"Georgia,serif"}}>
-                  {tradeRevealing?CARDS[tradeOffer.type]?.n:"???"}
-                </div>
+                <div style={{fontSize:9,color:"#4caf82",fontFamily:"Georgia,serif"}}>{CARDS[tradeOffer.type]?.d}</div>
               </div>
 
               <div style={{fontSize:32,color:"#4caf82"}}>⇄</div>
@@ -1485,7 +1512,7 @@ export default function App(){
                     const def=CARDS[card.type];
                     const sel=tradeSel===card.uid;
                     return(
-                      <div key={card.uid} onClick={()=>!tradeRevealing&&setTradeSel(card.uid)}
+                      <div key={card.uid} onClick={()=>setTradeSel(sel?null:card.uid)}
                         style={{width:70,height:105,borderRadius:6,overflow:"hidden",cursor:"pointer",
                           position:"relative",transition:"transform 0.15s",
                           transform:sel?"translateY(-8px) scale(1.06)":"none",
@@ -1511,44 +1538,36 @@ export default function App(){
               </div>
             </div>
             <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-              <button disabled={!tradeSel||tradeRevealing}
+              <button disabled={!tradeSel}
                 onClick={()=>{
-                  if(!tradeSel)return;
-                  setTradeRevealing(true);
-                  setTimeout(()=>{
-                    const selCard=hand.find(c=>c.uid===tradeSel);
-                    if(selCard){
-                      setHand(h=>[...h.filter(c=>c.uid!==tradeSel),{uid:nuid(),type:tradeOffer.type,flipIn:true}]);
-                      setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
-                      setAlexHand(h=>[...h.filter((_,i)=>i!==tradeOffer.idx),selCard.type]);
-                      setCoopScore(s=>s+1);
-                    }
-                    setTimeout(()=>{
-                      setTradeOffer(null);setTradeSel(null);setTradeRevealing(false);
-                      alexSpeak("trade_accepted",gs);
-                    },900);
-                  },600);
+                  const selCard=hand.find(c=>c.uid===tradeSel);
+                  if(!selCard)return;
+                  setHand(h=>[...h.filter(c=>c.uid!==tradeSel),{uid:nuid(),type:tradeOffer.type,flipIn:true}]);
+                  setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
+                  setAlexHand(h=>[...h.filter((_,i)=>i!==tradeOffer.idx),selCard.type]);
+                  setCoopScore(s=>s+1);
+                  setTradeOffer(null);setTradeSel(null);
+                  alexSpeak("trade_accepted",gs);
                 }}
-                style={{background:tradeSel&&!tradeRevealing?"linear-gradient(135deg,#1a5530,#2a9060)":"rgba(255,255,255,0.04)",
-                  color:tradeSel&&!tradeRevealing?"#7be0b0":"#2a3028",
-                  border:tradeSel&&!tradeRevealing?"1px solid rgba(76,175,130,0.5)":"1px solid rgba(255,255,255,0.06)",
+                style={{background:tradeSel?"linear-gradient(135deg,#1a5530,#2a9060)":"rgba(255,255,255,0.04)",
+                  color:tradeSel?"#7be0b0":"#2a3028",
+                  border:tradeSel?"1px solid rgba(76,175,130,0.5)":"1px solid rgba(255,255,255,0.06)",
                   borderRadius:8,padding:"11px 26px",fontSize:12,fontWeight:700,
-                  cursor:tradeSel&&!tradeRevealing?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:0.5}}>
-                {tradeRevealing?"⏳ Обмен...":"ОБМЕНЯТЬСЯ ↔"}
+                  cursor:tradeSel?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:0.5}}>
+                ОБМЕНЯТЬСЯ ⇄
               </button>
-              <button disabled={tradeRevealing}
-                onClick={()=>{setTradeOffer(null);setTradeSel(null);alexSpeak("trade_declined",gs);}}
-                style={{background:"rgba(200,60,60,0.08)",color:tradeRevealing?"#2a1010":"#a04040",
+              <button onClick={()=>{setTradeOffer(null);setTradeSel(null);alexSpeak("trade_declined",gs);}}
+                style={{background:"rgba(200,60,60,0.08)",color:"#a04040",
                   border:"1px solid rgba(200,60,60,0.25)",borderRadius:8,padding:"11px 20px",
-                  fontSize:12,cursor:tradeRevealing?"default":"pointer",fontFamily:"Georgia,serif"}}>
+                  fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
                 ОТКАЗАТЬ</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mulligan overlay */}
-      {phase==="mulligan"&&(
+      {/* Mulligan overlay — only after tutorial is done */}
+      {phase==="mulligan"&&!showTutorial&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",display:"flex",
           alignItems:"center",justifyContent:"center",zIndex:99,backdropFilter:"blur(12px)",animation:"fadeIn 0.3s"}}>
           <div style={{background:"linear-gradient(135deg,#0e0a06,#180e04)",

@@ -149,7 +149,20 @@ button:not(:disabled):hover {
   z-index: 500;
   pointer-events: none;
   white-space: nowrap;
-  animation: bannerFadeIn 0.2s ease, bannerFadeOut 0.3s ease 1.5s forwards;
+  animation: bannerFadeIn 0.2s ease, bannerFadeOut 0.4s ease 2s forwards;
+}
+
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.3; letter-spacing: 2px; }
+  50%       { opacity: 1;   letter-spacing: 5px; }
+}
+
+.thinking-indicator {
+  font-family: Georgia, serif;
+  font-size: 14px;
+  color: #c8a060;
+  animation: thinkingPulse 1.1s ease-in-out infinite;
+  display: inline-block;
 }
 
 .effect-tooltip {
