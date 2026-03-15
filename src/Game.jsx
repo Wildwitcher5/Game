@@ -104,25 +104,31 @@ const AVATARS=[
 const CONDITIONS = ["cond_1","cond_2","cond_3","cond_4"];
 function assignCondition() { return CONDITIONS[Math.floor(Math.random()*4)]; }
 
+/*
+ * AVATAR_MANIFEST — update this array when researcher adds real images.
+ * Folder names: pro (approve), against (disapprove), neutral (neutral + control).
+ * Naming convention per README: av1.svg, av2.svg, ...
+ * Swap .svg → .png once researcher provides PNG files.
+ */
 const AVATAR_MANIFEST = {
-  approve:    ["av1.svg","av2.svg","av3.svg"],
-  disapprove: ["av1.svg","av2.svg","av3.svg"],
-  neutral:    ["av1.svg","av2.svg","av3.svg"],
-  control:    ["av1.svg","av2.svg","av3.svg"],
+  pro:     ["av1.svg","av2.svg","av3.svg"],
+  against: ["av1.svg","av2.svg","av3.svg"],
+  neutral: ["av1.svg","av2.svg","av3.svg"],
 };
 function pickAvatar(folder) {
-  const files = AVATAR_MANIFEST[folder];
-  return `/assets/avatars/${folder}/${files[Math.floor(Math.random()*files.length)]}`;
+  const files = AVATAR_MANIFEST[folder] ?? AVATAR_MANIFEST.neutral;
+  return `/avatars/${folder}/${files[Math.floor(Math.random()*files.length)]}`;
 }
 function assignAvatars(condition, ingroup) {
-  const outFolder = ingroup === "approve" ? "disapprove" : "approve";
-  const inFolder  = ingroup; // "approve" or "disapprove"
+  // outFolder = political opposite of the participant's group
+  const outFolder = ingroup === "approve" ? "against" : "pro";
+  const inFolder  = ingroup === "approve" ? "pro"     : "against";
   const partnerFolder =
-    condition === "cond_4" ? "control" : outFolder;
+    condition === "cond_4" ? "neutral" : outFolder;
   const oppFolder =
-    condition === "cond_1" ? inFolder :
+    condition === "cond_1" ? inFolder  :
     condition === "cond_2" ? outFolder :
-    condition === "cond_3" ? "neutral" : "control";
+    "neutral"; // cond_3 and cond_4
   return {
     avatar_partner:    pickAvatar(partnerFolder),
     avatar_opponent_1: pickAvatar(oppFolder),
@@ -572,6 +578,13 @@ function EffectBadge({type,stacks,color,bg,border}){
   );
 }
 
+/* ── AvatarImg — renders image with letter fallback on error ─────────── */
+function AvatarImg({src, fallback, style}){
+  const [failed,setFailed]=useState(false);
+  if(!src||failed) return <>{fallback}</>;
+  return <img src={src} alt="" style={style} onError={()=>setFailed(true)}/>;
+}
+
 function EffectBadges({poison,bleed}){
   if(!poison&&!bleed)return null;
   return(
@@ -611,9 +624,13 @@ function ConditionBriefScreen({ condition, ingroup, partnerAvatar, onStart }) {
           Ваша команда
         </div>
         <div style={{display:"flex",gap:24,alignItems:"flex-start",marginBottom:28}}>
-          <img src={partnerAvatar} alt="Партнёр"
-            style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",flexShrink:0,
-              border:"3px solid #e8e4de",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}/>
+          <div style={{width:80,height:80,borderRadius:"50%",flexShrink:0,overflow:"hidden",
+            border:"3px solid #e8e4de",boxShadow:"0 4px 16px rgba(0,0,0,0.15)",
+            background:"#d8d4ce",display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:32,color:"#a09888",fontFamily:"Georgia,serif"}}>
+            <AvatarImg src={partnerAvatar} fallback="?"
+              style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+          </div>
           <div>
             <div style={{fontSize:11,letterSpacing:1.5,color:"#b0a898",marginBottom:8,fontFamily:"Georgia,serif"}}>
               ВАШ ПАРТНЁР
@@ -705,17 +722,32 @@ export default function App(){
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
   useEffect(()=>{skipTurnRef.current=skipTurn;});
-  // Trigger post-game survey when game ends; save ts_game_end
+  // Trigger post-game survey when game ends; save ts_game_end to both stores
   useEffect(()=>{
     if(phase==="over"){
       const session=getCurrentSession();
       if(session){
         const updated={...session,ts_game_end:new Date().toISOString()};
         saveCurrentSession(updated);
+        upsertResponse(updated);
       }
       setShowSurvey2(true);
     }
   },[phase]);
+
+  // Restore condition + gameAvatars from session on mount (survives page reload)
+  useEffect(()=>{
+    const session=getCurrentSession();
+    if(session?.condition) setCondition(session.condition);
+    if(session?.avatar_partner){
+      setGameAvatars({
+        avatar_partner:    session.avatar_partner,
+        avatar_opponent_1: session.avatar_opponent_1,
+        avatar_opponent_2: session.avatar_opponent_2,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   // Ctrl+Shift+E → export screen
   useEffect(()=>{
@@ -1282,10 +1314,9 @@ export default function App(){
                     background:`radial-gradient(circle,${ring}44,rgba(0,0,0,0.7))`,
                     display:"flex",alignItems:"center",justifyContent:"center",
                     fontSize:16,opacity:isDead?0.2:1,border:`2px solid ${ring}55`,overflow:"hidden"}}>
-                    {gameAvatars?.[key==="e1"?"avatar_opponent_1":"avatar_opponent_2"]
-                      ?<img src={gameAvatars[key==="e1"?"avatar_opponent_1":"avatar_opponent_2"]}
-                          alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                      :name.charAt(0)}
+                    <AvatarImg src={gameAvatars?.[key==="e1"?"avatar_opponent_1":"avatar_opponent_2"]}
+                      fallback={name.charAt(0)}
+                      style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -1332,9 +1363,8 @@ export default function App(){
                   background:"radial-gradient(circle,rgba(76,175,130,0.3),rgba(0,0,0,0.7))",
                   display:"flex",alignItems:"center",justifyContent:"center",
                   fontSize:16,opacity:gs.alex.hp<=0?0.2:1,border:"2px solid rgba(76,175,130,0.4)",overflow:"hidden"}}>
-                  {gameAvatars?.avatar_partner
-                    ?<img src={gameAvatars.avatar_partner} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                    :"А"}
+                  <AvatarImg src={gameAvatars?.avatar_partner} fallback="А"
+                    style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -1421,9 +1451,8 @@ export default function App(){
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
               <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#2a7048,#4caf82)",
                 display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif",overflow:"hidden"}}>
-                {gameAvatars?.avatar_partner
-                  ?<img src={gameAvatars.avatar_partner} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  :"А"}
+                <AvatarImg src={gameAvatars?.avatar_partner} fallback="А"
+                  style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               </div>
               <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — АЛЕКС</div>
               {loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
