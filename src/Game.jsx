@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import "./index.css";
 import Tutorial from "./Tutorial.jsx";
 import Survey, { ExportScreen, getCurrentSession, saveCurrentSession, upsertResponse, getGroupText } from "./Survey.jsx";
+import AVATAR_MANIFEST from "virtual:avatar-manifest";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -101,22 +102,20 @@ const AVATARS=[
   {id:"av7",color:"#f0c040",letter:"G"},{id:"av8",color:"#e08050",letter:"H"},
 ];
 /* ── Experimental conditions & avatar system ─────────────────────────── */
+/*
+ * AVATAR_MANIFEST is a virtual module generated at build time by vite.config.js.
+ * It scans public/avatars/{pro,against,neutral}/ and lists every image file found,
+ * regardless of format (.jpg .jpeg .jfif .png .webp .svg …).
+ * Just drop new images into those folders — no code changes needed.
+ */
 const CONDITIONS = ["cond_1","cond_2","cond_3","cond_4"];
 function assignCondition() { return CONDITIONS[Math.floor(Math.random()*4)]; }
 
-/*
- * AVATAR_MANIFEST — update this array when researcher adds real images.
- * Folder names: pro (approve), against (disapprove), neutral (neutral + control).
- * Naming convention per README: av1.svg, av2.svg, ...
- * Swap .svg → .png once researcher provides PNG files.
- */
-const AVATAR_MANIFEST = {
-  pro:     ["av1.svg","av2.svg","av3.svg"],
-  against: ["av1.svg","av2.svg","av3.svg"],
-  neutral: ["av1.svg","av2.svg","av3.svg"],
-};
 function pickAvatar(folder) {
-  const files = AVATAR_MANIFEST[folder] ?? AVATAR_MANIFEST.neutral;
+  const files = AVATAR_MANIFEST[folder]?.length
+    ? AVATAR_MANIFEST[folder]
+    : (AVATAR_MANIFEST.neutral ?? []);
+  if (!files.length) return null;
   return `/avatars/${folder}/${files[Math.floor(Math.random()*files.length)]}`;
 }
 function assignAvatars(condition, ingroup) {
