@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./index.css";
 import Tutorial from "./Tutorial.jsx";
+import Survey from "./Survey.jsx";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -604,12 +605,18 @@ export default function App(){
   const [playerAvatar,setPlayerAvatar]=useState(()=>localStorage.getItem("playerAvatar")||"av1");
   const [setupName,setSetupName]=useState("");
   const [setupAvatar,setSetupAvatar]=useState(null);
+  const [showSurvey1,setShowSurvey1]=useState(true);
+  const [showSurvey2,setShowSurvey2]=useState(false);
+  const [survey1Data,setSurvey1Data]=useState(null);
+  const [survey2Data,setSurvey2Data]=useState(null);
 
   useEffect(()=>{setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
   useEffect(()=>{skipTurnRef.current=skipTurn;});
+  // Trigger post-game survey when game ends
+  useEffect(()=>{if(phase==="over")setShowSurvey2(true);},[phase]);
   // Auto-skip when player is dead but game continues (log only once)
   useEffect(()=>{
     if(phase==="player"&&gs.you.hp<=0&&!loading){
@@ -1666,7 +1673,13 @@ export default function App(){
         </div>)}
 
       {/* Tutorial overlay */}
-      {showTutorial&&!showSetup&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+      {showTutorial&&!showSetup&&!showSurvey1&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+
+      {/* Pre-game survey — shown after setup, before game */}
+      {showSurvey1&&!showSetup&&<Survey type="pre" onComplete={data=>{setSurvey1Data(data);setShowSurvey1(false);}}/>}
+
+      {/* Post-game survey — shown after game ends, above game-over screen */}
+      {showSurvey2&&<Survey type="post" onComplete={data=>{setSurvey2Data(data);setShowSurvey2(false);}}/>}
 
       {/* Player setup screen — shown on first run, before everything */}
       {showSetup&&(
