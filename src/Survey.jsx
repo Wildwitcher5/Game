@@ -165,16 +165,10 @@ function getResponses() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); } catch { return []; }
 }
 
-export function upsertResponse(session) {
-  const responses = getResponses();
-  const idx = responses.findIndex(r => r.session_id === session.session_id);
-  if (idx >= 0) {
-    responses[idx] = { ...responses[idx], ...session };
-  } else {
-    responses.push(session);
-  }
-  try { localStorage.setItem(LS_KEY, JSON.stringify(responses)); } catch(e) { console.error(e); }
-}
+/* upsertResponse: localStorage write removed — data now goes to the server.
+ * Kept as a no-op export so callers in Game.jsx don't need to change. */
+// eslint-disable-next-line no-unused-vars
+export function upsertResponse(_session) {}
 
 export function saveCurrentSession(data) {
   try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e) { console.error(e); }
@@ -561,6 +555,8 @@ export default function Survey({ type, onComplete }) {
 
   /* Cookie check — pre only */
   const [cookieScreen, setCookieScreen] = useState(() => isPre && getCookie("pol_study_done") ? "check" : null);
+  const [submitting,  setSubmitting]   = useState(false);
+  const [submitError, setSubmitError]  = useState(null);
 
   const [screen, setScreen] = useState(0);
   const [ans, setAns] = useState(() => {
@@ -676,7 +672,7 @@ export default function Survey({ type, onComplete }) {
           ans.reprOut,   ans.reprIn,   ans.threatOut,  ans.threatIn),
     };
     saveCurrentSession(updated);
-    upsertResponse(updated);
+    return updated;
   }
 
   function saveS2() {
@@ -717,23 +713,47 @@ export default function Survey({ type, onComplete }) {
       game_guess:      ans.gameGuess,
     };
     saveCurrentSession(updated);
-    upsertResponse(updated);
+    return updated;
+  }
+
+  /* ── Server POST helper ──────────────────────────────────────── */
+  async function postToServer(session) {
+    const isComplete = !isPre;
+    const r = await fetch('/api/save-response', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: session.session_id,
+        status:     isComplete ? 'complete' : 'incomplete',
+        data:       session,
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
   }
 
   /* ── Navigation ─────────────────────────────────────────────── */
-  function handleNext() {
+  async function handleNext() {
     if (screen < TOTAL - 1) {
       setScreen(s => s + 1);
       return;
     }
-    /* Final screen button */
-    if (isPre) {
-      saveS1();
-      onComplete({ direction: ans.direction, ingroup });
-    } else {
-      saveS2();
-      setCookie("pol_study_done", "1", 365);
-      onComplete({ direction: ans.direction, ingroup });
+    /* Final screen — POST to server before proceeding */
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      if (isPre) {
+        const session = saveS1();
+        await postToServer(session);
+        onComplete({ direction: ans.direction, ingroup });
+      } else {
+        const session = saveS2();
+        await postToServer(session);
+        setCookie("pol_study_done", "1", 365);
+        onComplete({ direction: ans.direction, ingroup });
+      }
+    } catch {
+      setSubmitError('Не удалось сохранить данные. Проверьте соединение и попробуйте ещё раз.');
+      setSubmitting(false);
     }
   }
 
@@ -786,7 +806,7 @@ export default function Survey({ type, onComplete }) {
   const complete  = isComplete();
   const progress  = TOTAL > 1 ? (screen / (TOTAL - 1)) * 100 : 100;
   const isFinal   = screen === IDX.final;
-  const btnLabel  = isFinal ? (isPre ? "Начать игру →" : "Завершить →") : "Далее →";
+  const btnLabel  = submitting ? "⏳ Сохраняем…" : isFinal ? (isPre ? "Начать игру →" : "Завершить →") : "Далее →";
 
   /* ── Screen titles ───────────────────────────────────────────── */
   const TITLES = {
@@ -1301,18 +1321,25 @@ export default function Survey({ type, onComplete }) {
         {renderScreen()}
 
         {/* Navigation */}
-        <div style={{ marginTop: 34, display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: 34, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+          {submitError && (
+            <div style={{ fontSize: 13, color: "#c0392b", background: "#fdf0ee",
+              border: "1px solid #e8c0bc", borderRadius: 8, padding: "10px 16px",
+              maxWidth: 460, lineHeight: 1.5, fontFamily: "Georgia, serif" }}>
+              ⚠ {submitError}
+            </div>
+          )}
           <button
             onClick={handleNext}
-            disabled={!complete}
+            disabled={!complete || submitting}
             style={{
-              background: complete ? "linear-gradient(135deg,#1a3a5c,#2d6496)" : "#e0dcd6",
-              color: complete ? "#fff" : "#b0a898",
+              background: complete && !submitting ? "linear-gradient(135deg,#1a3a5c,#2d6496)" : "#e0dcd6",
+              color: complete && !submitting ? "#fff" : "#b0a898",
               border: "none", borderRadius: 8, padding: "13px 46px",
               fontSize: 14, fontWeight: 700, letterSpacing: 0.5,
-              cursor: complete ? "pointer" : "default",
+              cursor: complete && !submitting ? "pointer" : "default",
               fontFamily: "Georgia, serif",
-              boxShadow: complete ? "0 4px 20px rgba(45,100,150,0.3)" : "none",
+              boxShadow: complete && !submitting ? "0 4px 20px rgba(45,100,150,0.3)" : "none",
               transition: "all 0.2s",
             }}
           >

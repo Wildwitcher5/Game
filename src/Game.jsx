@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./index.css";
 import Tutorial from "./Tutorial.jsx";
-import Survey, { ExportScreen, getCurrentSession, saveCurrentSession, upsertResponse, getGroupText } from "./Survey.jsx";
+import Survey, { getCurrentSession, saveCurrentSession, upsertResponse, getGroupText } from "./Survey.jsx";
 import AVATAR_MANIFEST from "virtual:avatar-manifest";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
@@ -719,7 +719,7 @@ export default function App(){
   const [showSurvey2,setShowSurvey2]=useState(false);
   const [survey1Data,setSurvey1Data]=useState(null);
   const [survey2Data,setSurvey2Data]=useState(null);
-  const [showExport,setShowExport]=useState(false);
+  // showExport removed — export is now server-side via /api/export
   const [showCondBrief,setShowCondBrief]=useState(false);
   const [condition,setCondition]=useState(null);
   const [gameAvatars,setGameAvatars]=useState(null); // {avatar_partner, avatar_opponent_1, avatar_opponent_2}
@@ -756,14 +756,7 @@ export default function App(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  // Ctrl+Shift+E → export screen
-  useEffect(()=>{
-    function handler(e){
-      if(e.ctrlKey&&e.shiftKey&&e.key==="E"){e.preventDefault();setShowExport(v=>!v);}
-    }
-    window.addEventListener("keydown",handler);
-    return()=>window.removeEventListener("keydown",handler);
-  },[]);
+  // Ctrl+Shift+E shortcut removed — export is now at /api/export-csv?secret=YOUR_SECRET
   // Auto-skip when player is dead but game continues (log only once)
   useEffect(()=>{
     if(phase==="player"&&gs.you.hp<=0&&!loading){
@@ -1938,8 +1931,7 @@ export default function App(){
       {/* Post-game survey — shown after game ends, above game-over screen */}
       {showSurvey2&&<Survey type="post" onComplete={data=>{setSurvey2Data(data);setShowSurvey2(false);}}/>}
 
-      {/* Export screen — Ctrl+Shift+E */}
-      {showExport&&<ExportScreen onClose={()=>setShowExport(false)}/>}
+      {/* Export: /api/export-csv?secret=YOUR_SECRET (server-side) */}
 
       {/* Player setup screen — shown on first run, before everything */}
       {showSetup&&(
