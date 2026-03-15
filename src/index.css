@@ -113,3 +113,62 @@ button:not(:disabled):hover {
   0%, 100% { transform: translateY(0) rotate(var(--arrow-rotate, 0deg)); }
   50%       { transform: translateY(-6px) rotate(var(--arrow-rotate, 0deg)); }
 }
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes bannerFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes comboBannerIn {
+  from { opacity: 0; transform: translateX(-50%) scale(0.85); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+@keyframes floatUp {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(-40px); }
+}
+
+.event-banner {
+  position: fixed;
+  bottom: 180px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 12, 4, 0.82);
+  border: 1px solid rgba(180, 130, 40, 0.5);
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  text-align: center;
+  z-index: 500;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: bannerFadeIn 0.2s ease, bannerFadeOut 0.3s ease 1.5s forwards;
+}
+
+.combo-banner {
+  position: fixed;
+  bottom: 220px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(40, 28, 4, 0.92);
+  border: 2px solid #f0c040;
+  border-radius: 10px;
+  padding: 12px 32px;
+  color: #f0c040;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  z-index: 501;
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  animation: comboBannerIn 0.25s ease, bannerFadeOut 0.4s ease 2s forwards;
+}

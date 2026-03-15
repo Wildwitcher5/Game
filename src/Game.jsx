@@ -65,7 +65,7 @@ const CARDS = {
   bleed:   {e:"🩸",  n:"КРОВОТЕЧЕНИЕ", d:"Кровотечение: 4 тика по −3 HP (стакается)", c:"#cc3344", t:"enemy", od:1},
   rage:    {e:"🔥",  n:"ЯРОСТЬ",       d:"−18 HP врагу, −4 HP себе",                 c:"#e06030", t:"enemy", od:2},
   joint:   {e:"💥",  n:"СОВМ. УДАР",  d:"22 урона (нужно согласие Алекса)",          c:"#e09a3c", t:"enemy", od:1},
-  spy:     {e:"🔍",  n:"ШПИОНАЖ",     d:"Намерение врага + взять его карту",         c:"#8b5cf6", t:null,    od:1},
+  spy:     {e:"🔍",  n:"ШПИОНАЖ",     d:"Украсть случайную карту из руки врага",    c:"#8b5cf6", t:"enemy", od:1},
   energy:  {e:"⚡",  n:"ЭНЕРГИЯ",     d:"+2 ОД на след. ход",                        c:"#f0d060", t:null,    od:1},
   trap:    {e:"🪤",  n:"ЛОВУШКА",     d:"Ловушка: −10 HP атакующему врагу",         c:"#d97706", t:null,    od:1},
   counter: {e:"↩️",  n:"КОНТР",       d:"Отразить урон по тебе обратно врагу",      c:"#06b6d4", t:null,    od:1},
@@ -572,7 +572,6 @@ export default function App(){
   const [jointCard,setJC]=useState(null);
   const [jointReady,setJR]=useState(false);
   const [jointTarget,setJointTarget]=useState(null);
-  const [spyCard,setSpy]=useState(null);
   const [phase,setPhase]=useState("mulligan");
   const [winner,setWinner]=useState(null);
   const [log,setLog]=useState([]);
@@ -603,16 +602,23 @@ export default function App(){
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
   const skipTurnRef=useRef(null);
+  const deathLoggedRef=useRef(false);
+  const animQueueRef=useRef([]);
+  const animPlayingRef=useRef(false);
+  const [animating,setAnimating]=useState(false);
 
   useEffect(()=>{setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
   useEffect(()=>{skipTurnRef.current=skipTurn;});
-  // Auto-skip when player is dead but game continues
+  // Auto-skip when player is dead but game continues (log only once)
   useEffect(()=>{
     if(phase==="player"&&gs.you.hp<=0&&!loading){
-      addLog("⚰️ Ты пал. Алекс продолжает сражаться...");
+      if(!deathLoggedRef.current){
+        addLog("⚰️ Ты без сознания. Напарник сражается один.");
+        deathLoggedRef.current=true;
+      }
       const t=setTimeout(()=>skipTurnRef.current?.(),1800);
       return()=>clearTimeout(t);
     }
@@ -627,8 +633,50 @@ export default function App(){
     setTimeout(()=>setFlash(f=>{const n={...f};delete n[key];return n;}),800);
   };
 
+  /* ── Animation queue ─────────────────────────────────────────────────── */
+  const dly=ms=>new Promise(r=>setTimeout(r,ms));
+  const enqueue=animFn=>{animQueueRef.current.push(animFn);if(!animPlayingRef.current)processQueue();};
+  const processQueue=async()=>{
+    if(animQueueRef.current.length===0){animPlayingRef.current=false;setAnimating(false);return;}
+    animPlayingRef.current=true;setAnimating(true);
+    const fn=animQueueRef.current.shift();
+    await fn();
+    processQueue();
+  };
+  const showBanner=(text,color='#e8d090')=>{
+    const el=document.createElement('div');el.className='event-banner';
+    el.style.color=color;el.textContent=text;document.body.appendChild(el);
+    setTimeout(()=>el.remove(),2000);
+  };
+  const showComboBanner=name=>{
+    const el=document.createElement('div');el.className='combo-banner';
+    el.textContent=`✨ КОМБО: ${name.toUpperCase()}`;document.body.appendChild(el);
+    setTimeout(()=>el.remove(),2400);
+  };
+  const flashEntity=(key,isHeal=false)=>{
+    const el=document.querySelector(`[data-entity="${key}"]`);if(!el)return;
+    el.style.transition='background 0.15s';
+    el.style.background=isHeal?'rgba(40,180,80,0.35)':'rgba(200,40,40,0.35)';
+    setTimeout(()=>{el.style.background='';},300);
+  };
+  const floatNumber=(key,value,isHeal=false)=>{
+    const base=document.querySelector(`[data-entity="${key}"]`);if(!base)return;
+    const rect=base.getBoundingClientRect();
+    const el=document.createElement('div');
+    el.style.cssText=`position:fixed;left:${rect.left+rect.width/2}px;top:${rect.top}px;`+
+      `color:${isHeal?'#60d080':'#ff5050'};font-size:20px;font-weight:bold;`+
+      `pointer-events:none;z-index:600;text-shadow:0 2px 4px rgba(0,0,0,0.8);`+
+      `animation:floatUp 1s ease forwards;transform:translateX(-50%);`;
+    el.textContent=isHeal?`+${value}`:`-${value}`;document.body.appendChild(el);
+    setTimeout(()=>el.remove(),1000);
+  };
+  const doEvent=(key,value,text,color,isHeal=false)=>{
+    doFlash(key,isHeal?0:value);
+    enqueue(async()=>{flashEntity(key,isHeal);floatNumber(key,value,isHeal);showBanner(text,color);await dly(600);});
+  };
+
   const usedOd=played.reduce((s,p)=>s+CARDS[p.card.type].od,0)
-    +(jointCard?CARDS.joint.od:0)+(spyCard?CARDS.spy.od:0);
+    +(jointCard?CARDS.joint.od:0);
   const odLeft=od-usedOd;
 
   /* ── Preview logic ───────────────────────────────────────────────────── */
@@ -641,12 +689,9 @@ export default function App(){
     const def=CARDS[card.type];
     const sel=played.find(p=>p.card.uid===card.uid);
     const jp=jointCard?.uid===card.uid;
-    const sp=spyCard?.uid===card.uid;
     if(sel){setPlayed(pl=>pl.filter(p=>p.card.uid!==card.uid));setPreview(null);return;}
     if(jp){setJC(null);setJR(false);setJointTarget(null);setPreview(null);return;}
-    if(sp){setSpy(null);setPreview(null);return;}
     if(odLeft<def.od)return;
-    if(card.type==="spy"){setSpy(card);setPreview(null);return;}
     if(def.t===null&&card.type!=="joint"){
       setPlayed(pl=>[...pl,{card,target:null}]);
       setPreview(null);
@@ -809,7 +854,7 @@ export default function App(){
   /* ── Skip ───────────────────────────────────────────────────────────── */
   const skipTurn=async()=>{
     if(phase!=="player"||loading)return;
-    setPhase("busy");setLoad(true);setPlayed([]);setJC(null);setJR(false);setSpy(null);
+    setPhase("busy");setLoad(true);setPlayed([]);setJC(null);setJR(false);
     const nb=Math.min(odBank+1,1);
     addLog(`Ход ${turn}: Пропуск — +1 ОД в банк`);addChat("alex","Копишь силы? Ладно.");
     let g={you:{...gs.you},alex:{...gs.alex},e1:{...gs.e1},e2:{...gs.e2}};
@@ -823,15 +868,17 @@ export default function App(){
       const pool=alexMap[a.type]??["attack"];
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capDeck,capCycle);capDeck=nd;capCycle=ncy;newAlexH=[...newAlexH,nc];}
-      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#ff6060');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"💚 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💚 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
     }
-    {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    const prevHpSk={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
-    for(const[k,d]of Object.entries(eh))doFlash(k,d);
+    for(const[k,d]of Object.entries(eh)){doEvent(k,d,`⚔ ${k==="you"?"Страж → Ты":k==="alex"?"Страж → Алекс":en(k)+" получил урон"} −${d} HP`,'#ff9040');}
+    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHpSk[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
     setGs(g);logs.forEach(addLog);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
     // Draw 1 card for player at end of skip turn
@@ -855,14 +902,15 @@ export default function App(){
 
   /* ── End turn ───────────────────────────────────────────────────────── */
   const endTurn=async()=>{
-    if(phase!=="player"||loading||(played.length===0&&!jointCard&&!spyCard))return;
+    if(phase!=="player"||loading||(played.length===0&&!jointCard))return;
     setPhase("busy");setLoad(true);
     let capturedDeck=[...sharedDeck];let capturedCycle=fatigueCycle;
+    let localE1h=[...e1Hand];let localE2h=[...e2Hand];
     let g={you:{...gs.you},alex:{...gs.alex},e1:{...gs.e1},e2:{...gs.e2}};
     const logs=[];let nob=odBank;
     // Fatigue damage per card played
     const fatiguePerCard=fpCycle(capturedCycle);
-    const fatigueDmg=fatiguePerCard*(played.length+(jointCard?1:0)+(spyCard?1:0));
+    const fatigueDmg=fatiguePerCard*(played.length+(jointCard?1:0));
     if(fatigueDmg>0){g.you={...g.you,hp:cl(g.you.hp-fatigueDmg,0,g.you.maxHp)};doFlash("you",fatigueDmg);logs.push(`😓 Изнурение (цикл ${capturedCycle}): −${fatigueDmg}HP`);}
 
     const combo=detectCombo(played);let cr=null;
@@ -872,37 +920,43 @@ export default function App(){
       cr=combo.bonus(g,ct);logs.push(combo.msg);
       setComboGlow(combo.name);setTimeout(()=>setComboGlow(null),5000);
     }
+    const stolenCards=[];
     for(const{card,target}of played){
       switch(card.type){
-        case"attack":{const d=8;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);logs.push(`Ты ⚔️→${en(target)}: −${d}`);break;}
-        case"shield":{g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};logs.push("Ты 🛡️: +10HP");break;}
-        case"healAlex":{if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+12,0,g.alex.maxHp)};logs.push("Ты 💉→Алекс: +12HP");}break;}
-        case"poison":{if(g[target].hp>0){g[target]={...g[target],poison:3};logs.push(`Ты ☠️→${en(target)}: яд`);}break;}
-        case"bleed":{if(g[target].hp>0){g[target]={...g[target],bleed:(g[target].bleed??0)+4};logs.push(`Ты 🩸→${en(target)}: кровотечение ×4`);}break;}
-        case"rage":{const d=18;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);g.you={...g.you,hp:cl(g.you.hp-4,0,g.you.maxHp)};doFlash("you",4);logs.push(`Ты 🔥→${en(target)}: −${d} (−4HP себе)`);break;}
-        case"energy":{nob=2;logs.push("Ты ⚡: +2ОД на след. ход");break;}
-        case"trap":{g.you={...g.you,trap:true};logs.push("Ты 🪤: Ловушка установлена");break;}
-        case"counter":{g.you={...g.you,counter:true};logs.push("Ты ↩️: Контрудар готов");break;}
-        case"double":{const d=8;const ot=["e1","e2"].find(k=>k!==target&&g[k].hp>0)??target;if(g[target].hp>0){g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doFlash(target,d);}if(ot!==target&&g[ot].hp>0){g[ot]={...g[ot],hp:cl(g[ot].hp-d,0,999)};doFlash(ot,d);}logs.push(`Ты ⚔️⚔️→${en(target)}+${en(ot)}: −${d} каждому`);break;}
+        case"attack":{const d=8;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`⚔ Атака → ${en(target)} −${d} HP`,'#ff6060');logs.push(`Ты ⚔️→${en(target)}: −${d}`);break;}
+        case"shield":{g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};doEvent("you",10,"💚 Щит → +10 HP",'#60d080',true);logs.push("Ты 🛡️: +10HP");break;}
+        case"healAlex":{if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+12,0,g.alex.maxHp)};doEvent("alex",12,"💚 Исцелить → Алекс +12 HP",'#60d080',true);logs.push("Ты 💉→Алекс: +12HP");}break;}
+        case"poison":{if(g[target].hp>0){g[target]={...g[target],poison:3};showBanner(`☠ Яд → ${en(target)}`,'#c060ff');logs.push(`Ты ☠️→${en(target)}: яд`);}break;}
+        case"bleed":{if(g[target].hp>0){g[target]={...g[target],bleed:(g[target].bleed??0)+4};showBanner(`🩸 Кровотечение → ${en(target)}`,'#e04040');logs.push(`Ты 🩸→${en(target)}: кровотечение ×4`);}break;}
+        case"rage":{const d=18;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`🔥 Ярость → ${en(target)} −${d} HP`,'#ff6060');g.you={...g.you,hp:cl(g.you.hp-4,0,g.you.maxHp)};doEvent("you",4,"🔥 Отдача −4 HP",'#ff9040');logs.push(`Ты 🔥→${en(target)}: −${d} (−4HP себе)`);break;}
+        case"energy":{nob=2;showBanner("⚡ Энергия → +2 ОД на следующий ход",'#e8d090');logs.push("Ты ⚡: +2ОД на след. ход");break;}
+        case"trap":{g.you={...g.you,trap:true};showBanner("🪤 Ловушка установлена",'#e8d090');logs.push("Ты 🪤: Ловушка установлена");break;}
+        case"counter":{g.you={...g.you,counter:true};showBanner("↩️ Контрудар готов",'#e8d090');logs.push("Ты ↩️: Контрудар готов");break;}
+        case"double":{const d=8;const ot=["e1","e2"].find(k=>k!==target&&g[k].hp>0)??target;if(g[target].hp>0){g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`⚔⚔ Двойной → ${en(target)} −${d} HP`,'#ff6060');}if(ot!==target&&g[ot].hp>0){g[ot]={...g[ot],hp:cl(g[ot].hp-d,0,999)};doEvent(ot,d,`⚔⚔ Двойной → ${en(ot)} −${d} HP`,'#ff6060');}logs.push(`Ты ⚔️⚔️→${en(target)}+${en(ot)}: −${d} каждому`);break;}
         case"revive":{if(g.alex.hp<=0){g.alex={...g.alex,hp:30};logs.push("✨ Алекс возрождён (30HP)!");setReviveAnim(true);setTimeout(()=>setReviveAnim(false),1500);addChat("alex","Я ещё в строю! Спасибо братец.");}break;}
+        case"spy":{
+          const sHand=target==="e1"?localE1h:localE2h;
+          if(sHand.length>0){
+            const si=rnd(sHand.length);const st=sHand[si];const rest=sHand.filter((_,i)=>i!==si);
+            if(target==="e1")localE1h=rest;else localE2h=rest;
+            stolenCards.push({uid:nuid(),type:st,flipIn:true});
+            logs.push(`🔍 Шпионаж: украдена «${CARDS[st].n}» у ${en(target)}`);
+          }else{logs.push(`🔍 Шпионаж: у ${en(target)} нет карт`);}
+          break;}
       }
     }
     if(cr){
-      if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};logs.push(`Комбо: команда +${cr.hp}HP`);}
-      else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doFlash(cr.tgt,cr.hp);logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
+      if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};doEvent("you",cr.hp,`✨ Комбо → Ты +${cr.hp} HP`,'#60d080',true);doEvent("alex",cr.hp,`✨ Комбо → Алекс +${cr.hp} HP`,'#60d080',true);logs.push(`Комбо: команда +${cr.hp}HP`);}
+      else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doEvent(cr.tgt,cr.hp,`✨ Комбо → ${en(cr.tgt)} −${cr.hp} HP`,'#f0c040');logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
+      enqueue(async()=>{showComboBanner(combo.name);await dly(400);});
     }
     // Only remove joint card if Alex agreed; otherwise keep it in hand
     let newHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid));
     if(jointCard&&jointReady){newHand=newHand.filter(c=>c.uid!==jointCard.uid);}
-    if(spyCard){
-      newHand=newHand.filter(c=>c.uid!==spyCard.uid);
-      const{cards:[sc],deck:d2,cycle:c2}=drawFromDeck(1,capturedDeck,capturedCycle);
-      capturedDeck=d2;capturedCycle=c2;
-      newHand=[...newHand,sc];logs.push(`🔍 Шпионаж: взял карту из колоды`);
-    }
+    newHand=[...newHand,...stolenCards];
     setHand(newHand);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
-    setPlayed([]);setSpy(null);
-    if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doFlash(jointTarget,d);logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
+    setPlayed([]);
+    if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doEvent(jointTarget,d,`💥 Совместный удар → ${en(jointTarget)} −${d} HP`,'#ff6060');logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
@@ -915,28 +969,31 @@ export default function App(){
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capturedDeck,capturedCycle);capturedDeck=nd;capturedCycle=ncy;newAlexH=[...newAlexH,nc];}
       const st=targ=>{if(targ&&g[targ]?.hp>0)return targ;return["e1","e2"].find(k=>g[k].hp>0)??null;};
-      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doFlash(t2,d);logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#ff6060');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"💚 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💚 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
     }
     // Alex-player joint combos
     {const playerTypes=played.map(p=>p.card.type);let jcFired=false;
     if(playerTypes.includes("shield")&&alexActionType==="shield"){
       g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};
+      doEvent("you",10,"🛡🛡 Стена щитов → Ты +10 HP",'#60d080',true);doEvent("alex",10,"🛡🛡 Стена щитов → Алекс +10 HP",'#60d080',true);
       logs.push("🛡️🛡️ СТЕНА ЩИТОВ: команда +10HP!");setCoopScore(s=>s+1);jcFired=true;
     }else if((playerTypes.includes("attack")||playerTypes.includes("rage"))&&alexActionType==="attack"){
       const t3=played.find(p=>p.card.type==="attack"||p.card.type==="rage")?.target??["e1","e2"].find(k=>g[k].hp>0);
-      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-12,0,999)};doFlash(t3,12);logs.push(`⚔️⚔️ ДВОЙНОЙ НАТИСК: ${en(t3)} −12 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
+      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-12,0,999)};doEvent(t3,12,`⚔⚔ Двойной натиск → ${en(t3)} −12 HP`,'#ff6060');logs.push(`⚔️⚔️ ДВОЙНОЙ НАТИСК: ${en(t3)} −12 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
     }else if(playerTypes.includes("joint")&&jointReady&&alexActionType==="attack"){
       const t3=jointTarget??["e1","e2"].find(k=>g[k].hp>0);
-      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-8,0,999)};doFlash(t3,8);logs.push(`💥⚔️ ЖИВАЯ ЦЕПЬ: ${en(t3)} −8 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
+      if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-8,0,999)};doEvent(t3,8,`💥⚔ Живая цепь → ${en(t3)} −8 HP`,'#ff6060');logs.push(`💥⚔️ ЖИВАЯ ЦЕПЬ: ${en(t3)} −8 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
     }
     if(jcFired)setTimeout(()=>alexSpeak("joint_combo",g),400);}
-    {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doFlash("alex",fd);logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    const prevHp={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
-    for(const[k,d]of Object.entries(eh))doFlash(k,d);
+    for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${k==="e1"?en("e1"):en("e2")} −${d} HP`:`⚔ ${en("e1")||"Враг"} → ${k==="you"?"Ты":"Алекс"} −${d} HP`,'#ff9040');}
+    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHp[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
     setGs(g);logs.forEach(addLog);
     setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);setPassedCard(false);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
@@ -953,11 +1010,11 @@ export default function App(){
       setTimeout(()=>alexSpeak("trade_offer",g),800);
     }
     // Draw 1 card for player at end of turn
-    {const curHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid));
+    {const curHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid));
     const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capturedDeck,capturedCycle);
     capturedDeck=d3;capturedCycle=c3;
     if(curHand.length>=5){setPendingDrawCard(drawn);}
-    else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)&&c.uid!==(spyCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
+    else{setHand(h=>[...h.filter(c=>!played.find(p=>p.card.uid===c.uid)).filter(c=>c.uid!==(jointCard?.uid)),drawn]);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);}
     setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);}
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
     else if(g.you.hp<=0&&g.alex.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
@@ -1002,7 +1059,7 @@ export default function App(){
     setGs(initGs());setHand(gi.hand);setSharedDeck(gi.deck);setFatigueCycle(gi.fatigueCycle);
     setE1Hand(gi.e1Hand);setE2Hand(gi.e2Hand);setAlexHand(gi.alexHand);
     setPendingDrawCard(null);setMulliganMarked(new Set());
-    setPlayed([]);setJC(null);setJR(false);setJointTarget(null);setSpy(null);
+    setPlayed([]);setJC(null);setJR(false);setJointTarget(null);
     setPhase("mulligan");setWinner(null);setLog([]);
     setTurn(1);setLoad(false);setFlash({});setShake(null);setOd(2);setOdBank(0);
     setLastMsg("");setComboGlow(null);setPreview(null);
@@ -1010,13 +1067,13 @@ export default function App(){
     setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
   };
 
-  const isP=phase==="player"&&!loading&&gs.you.hp>0;
-  const canEnd=isP&&(played.length>0||!!jointCard||!!spyCard);
+  const isP=phase==="player"&&!loading&&!animating&&gs.you.hp>0;
+  const canEnd=isP&&(played.length>0||!!jointCard);
   const combo=detectCombo(played);
   const comboTypes=combo?played.map(p=>p.card.type):[];
   const previewAlreadySel=preview&&(
     !!played.find(p=>p.card.uid===preview.uid)||
-    jointCard?.uid===preview.uid||spyCard?.uid===preview.uid
+    jointCard?.uid===preview.uid
   );
   const previewOdLeft=previewAlreadySel?odLeft+(preview?CARDS[preview.type].od:0):odLeft;
 
@@ -1078,7 +1135,7 @@ export default function App(){
           ].map(({key,name,sub,bar,ring})=>{
             const g=gs[key];const isDead=g.hp<=0;
             return(
-              <div key={key} style={{flex:1,background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
+              <div key={key} data-entity={key} style={{flex:1,background:"linear-gradient(135deg,rgba(25,16,8,0.95),rgba(15,10,5,0.98))",
                 border:`1px solid ${isDead?"rgba(255,255,255,0.04)":ring+"44"}`,
                 borderRadius:10,padding:"10px 14px",position:"relative",
                 animation:shaking===key?"shake 0.5s":flash[key]?"hitFlash 0.7s":undefined,
@@ -1124,7 +1181,7 @@ export default function App(){
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
 
             {/* Alex block */}
-            <div data-tutorial="ally" style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
+            <div data-tutorial="ally" data-entity="alex" style={{background:"linear-gradient(135deg,rgba(10,25,18,0.95),rgba(5,15,10,0.98))",
               border:`1px solid ${gs.alex.hp<=0?"rgba(255,255,255,0.04)":"rgba(76,175,130,0.35)"}`,
               borderRadius:10,padding:"10px 14px",position:"relative",
               animation:reviveAnim?"reviveGlow 1s":shaking==="alex"?"shake 0.5s":flash.alex?"hitFlash 0.7s":undefined,
@@ -1195,10 +1252,6 @@ export default function App(){
                 {loading&&!jointReady&&<div style={{fontSize:10,color:"#888",animation:"pulse 1s infinite"}}>⏳ Спрашиваю Алекса…</div>}
                 {jointReady&&<div style={{fontSize:11,color:"#4caf82",fontFamily:"Georgia,serif"}}>✓ Готов — завершай ход</div>}
                 {!loading&&!jointReady&&jointTarget&&<div style={{fontSize:11,color:"#e05252",fontFamily:"Georgia,serif"}}>✗ Алекс не готов</div>}
-              </div>)}
-            {spyCard&&(
-              <div style={{padding:"8px 12px",background:"rgba(139,92,246,0.08)",border:"1.5px solid rgba(139,92,246,0.3)",borderRadius:10,animation:"fadeIn 0.2s"}}>
-                <div style={{fontSize:11,color:"#8b5cf6",fontFamily:"Georgia,serif"}}>🔍 Шпионаж активен</div>
               </div>)}
           </div>
 
@@ -1273,10 +1326,9 @@ export default function App(){
               const def=CARDS[card.type];
               const sel=!!played.find(p=>p.card.uid===card.uid);
               const jp=jointCard?.uid===card.uid;
-              const sp=spyCard?.uid===card.uid;
-              const notOd=odLeft<def.od&&!sel&&!jp&&!sp;
+              const notOd=odLeft<def.od&&!sel&&!jp;
               const isCb=combo&&comboTypes.includes(card.type)&&sel;
-              return <GameCard key={card.uid} card={card} selected={sel||sp} jointPending={jp}
+              return <GameCard key={card.uid} card={card} selected={sel} jointPending={jp}
                 dimmed={!isP||notOd} notEnoughOd={notOd} comboWith={isCb}
                 onPreview={()=>handlePreview(card)}/>;
             })}
@@ -1293,7 +1345,7 @@ export default function App(){
           borderRadius:10,flexWrap:"wrap"}}>
 
           {/* HP + player effects */}
-          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:150}}>
+          <div data-entity="you" style={{display:"flex",flexDirection:"column",gap:4,minWidth:150}}>
             <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>HP ИГРОКА</div>
             <HpBar hp={gs.you.hp} maxHp={MHP.you} color="#4c7fe0" flash={flash.you}/>
             <EffectBadges poison={gs.you.poison} bleed={gs.you.bleed}/>
@@ -1344,21 +1396,21 @@ export default function App(){
           <div style={{flex:1}}/>
 
           {/* Buttons */}
-          <button onClick={skipTurn} disabled={!isP||gs.you.hp<=0} style={{
-            background:"rgba(200,160,80,0.04)",color:isP?"#7a6035":"#2a1808",
+          <button onClick={skipTurn} disabled={!isP||gs.you.hp<=0||animating} style={{
+            background:"rgba(200,160,80,0.04)",color:isP&&!animating?"#7a6035":"#2a1808",
             border:"1px solid rgba(200,160,80,0.15)",borderRadius:7,
-            padding:"7px 12px",fontSize:9,fontWeight:600,cursor:isP?"pointer":"default",
-            fontFamily:"Georgia,serif",letterSpacing:0.5,opacity:isP?1:0.4}}>
+            padding:"7px 12px",fontSize:9,fontWeight:600,cursor:isP&&!animating?"pointer":"default",
+            fontFamily:"Georgia,serif",letterSpacing:0.5,opacity:isP&&!animating?1:0.4}}>
             ПРОПУСК<br/>+1 ОД
           </button>
-          <button onClick={endTurn} disabled={!canEnd} style={{
-            background:canEnd?"linear-gradient(135deg,#7a3e00,#d4841a)":"rgba(255,255,255,0.04)",
-            color:canEnd?"#fff":"#2a1808",border:canEnd?"1px solid rgba(220,140,40,0.5)":"none",
+          <button onClick={endTurn} disabled={!canEnd||animating} style={{
+            background:canEnd&&!animating?"linear-gradient(135deg,#7a3e00,#d4841a)":"rgba(255,255,255,0.04)",
+            color:canEnd&&!animating?"#fff":"#2a1808",border:canEnd&&!animating?"1px solid rgba(220,140,40,0.5)":"none",
             borderRadius:8,padding:"12px 28px",fontSize:13,fontWeight:900,
-            cursor:canEnd?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:1,
-            boxShadow:canEnd?"0 0 28px rgba(210,130,20,0.55),0 2px 8px rgba(0,0,0,0.5)":"none",
+            cursor:canEnd&&!animating?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:1,
+            boxShadow:canEnd&&!animating?"0 0 28px rgba(210,130,20,0.55),0 2px 8px rgba(0,0,0,0.5)":"none",
             transition:"all 0.2s"}}>
-            {loading?"⏳ ЖДЁМ…":"ЗАВЕРШИТЬ ХОД ▶"}
+            {loading?"⏳ ЖДЁМ…":animating?"⚡ АНИМАЦИЯ…":"ЗАВЕРШИТЬ ХОД ▶"}
           </button>
         </div>
 
