@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./index.css";
 import Tutorial from "./Tutorial.jsx";
-import Survey from "./Survey.jsx";
+import Survey, { ExportScreen, getCurrentSession, saveCurrentSession } from "./Survey.jsx";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -609,14 +609,33 @@ export default function App(){
   const [showSurvey2,setShowSurvey2]=useState(false);
   const [survey1Data,setSurvey1Data]=useState(null);
   const [survey2Data,setSurvey2Data]=useState(null);
+  const [showExport,setShowExport]=useState(false);
 
   useEffect(()=>{setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
   useEffect(()=>{skipTurnRef.current=skipTurn;});
-  // Trigger post-game survey when game ends
-  useEffect(()=>{if(phase==="over")setShowSurvey2(true);},[phase]);
+  // Trigger post-game survey when game ends; save ts_game_end
+  useEffect(()=>{
+    if(phase==="over"){
+      const session=getCurrentSession();
+      if(session){
+        const updated={...session,ts_game_end:new Date().toISOString()};
+        saveCurrentSession(updated);
+      }
+      setShowSurvey2(true);
+    }
+  },[phase]);
+
+  // Ctrl+Shift+E → export screen
+  useEffect(()=>{
+    function handler(e){
+      if(e.ctrlKey&&e.shiftKey&&e.key==="E"){e.preventDefault();setShowExport(v=>!v);}
+    }
+    window.addEventListener("keydown",handler);
+    return()=>window.removeEventListener("keydown",handler);
+  },[]);
   // Auto-skip when player is dead but game continues (log only once)
   useEffect(()=>{
     if(phase==="player"&&gs.you.hp<=0&&!loading){
@@ -1680,6 +1699,9 @@ export default function App(){
 
       {/* Post-game survey — shown after game ends, above game-over screen */}
       {showSurvey2&&<Survey type="post" onComplete={data=>{setSurvey2Data(data);setShowSurvey2(false);}}/>}
+
+      {/* Export screen — Ctrl+Shift+E */}
+      {showExport&&<ExportScreen onClose={()=>setShowExport(false)}/>}
 
       {/* Player setup screen — shown on first run, before everything */}
       {showSetup&&(
