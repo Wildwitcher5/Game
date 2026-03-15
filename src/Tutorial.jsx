@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const ARROW_IMG = "/assets/arrow.png";
 
@@ -72,7 +72,7 @@ const TUTORIAL_STEPS = [
   {
     target: null,
     title: "Комбо — играй карты вместе",
-    text: "Если за один ход сыграть определённые пары — срабатывает комбо:\n• Ярость + Яд = Ядовитый огонь (+24 HP + яд)\n• Энергия + Ярость = Шквал (+16 HP)\n• Щит + Исцелить = Крепость (команда +8 HP)\n• Ловушка + Атака = Засада (+14 HP)\n• Атака + Атака = Двойной удар (+8 HP)\nСрабатывает автоматически.",
+    text: "Если за один ход сыграть определённые пары — срабатывает комбо:\n• Ярость + Яд = Ядовитый огонь (+24 HP + яд)\n• Энергия + Ярость = Шквал (+16 HP)\n• Щит + Исцелить = Крепость (каждый +8 HP)\n• Ловушка + Атака = Засада (+14 HP)\n• Атака + Атака = Двойной удар (+8 HP)\n• Атака + Двойной = Натиск (+12 HP)\n• Яд + Кровотечение = Кровавый яд (+8 HP + яд)\nСрабатывает автоматически.",
     arrowDir: null,
   },
   {
@@ -101,7 +101,6 @@ export default function Tutorial({ onEnd }) {
   const [targetRect, setTargetRect] = useState(null);
   const [popupPos, setPopupPos] = useState({ top: "50%", left: "50%", transform: "translate(-50%, -50%)" });
   const [arrowStyle, setArrowStyle] = useState({ display: "none" });
-  const popupRef = useRef(null);
 
   useEffect(() => {
     const timer = setTimeout(updatePositions, 60);
@@ -231,7 +230,8 @@ export default function Tutorial({ onEnd }) {
         }} />
       )}
 
-      {/* Arrow */}
+      {/* Arrow — rotation is handled inside the CSS keyframe via --arrow-rotate variable.
+           Do NOT set transform here: inline styles override animation transforms. */}
       <img
         src={ARROW_IMG}
         alt=""
@@ -246,13 +246,11 @@ export default function Tutorial({ onEnd }) {
           animationDuration: "1s",
           animationTimingFunction: "ease-in-out",
           animationIterationCount: "infinite",
-          transform: `rotate(var(--arrow-rotate, 0deg))`,
         }}
       />
 
       {/* Popup card */}
       <div
-        ref={popupRef}
         style={{
           ...popupPos,
           position: "fixed",
