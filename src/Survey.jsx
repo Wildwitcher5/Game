@@ -97,8 +97,13 @@ const INCOME_OPTS = [
 
 /* CSV column order for export */
 const CSV_HEADERS = [
-  "session_id","status","ts_s1_start","ts_s1_end","ts_game_end","ts_s2_end",
+  // Meta
+  "session_id","status","ts_s1_start","ts_s1_end","ts_game_end","ts_s2_end","condition",
+  // Demographics
   "dem_gender","dem_age","dem_education","dem_income",
+  // Avatars
+  "avatar_self","nick_self","avatar_partner","avatar_opponent_1","avatar_opponent_2",
+  // S1 raw
   "s1_direction","s1_ingroup",
   ...Array.from({length:6},(_,i)=>`s1_traits_out_${i+1}`),
   ...Array.from({length:6},(_,i)=>`s1_traits_in_${i+1}`),
@@ -113,6 +118,15 @@ const CSV_HEADERS = [
   ...Array.from({length:4},(_,i)=>`s1_threat_in_${i+1}`),
   ...Array.from({length:4},(_,i)=>`s1_contact_out_${i+1}`),
   ...Array.from({length:4},(_,i)=>`s1_contact_in_${i+1}`),
+  // S1 indices
+  "s1_traits_in_mean","s1_traits_out_mean","s1_traits_diff",
+  "s1_affect_diff",
+  "s1_dist_in_mean","s1_dist_out_mean","s1_dist_diff",
+  "s1_coop_in_mean","s1_coop_out_mean","s1_coop_diff",
+  "s1_repr_in_mean","s1_repr_out_mean","s1_repr_diff",
+  "s1_threat_in_mean","s1_threat_out_mean","s1_threat_diff",
+  "s1_polar_index",
+  // S2 raw
   "s2_direction","s2_ingroup",
   ...Array.from({length:6},(_,i)=>`s2_traits_out_${i+1}`),
   ...Array.from({length:6},(_,i)=>`s2_traits_in_${i+1}`),
@@ -125,6 +139,17 @@ const CSV_HEADERS = [
   ...Array.from({length:5},(_,i)=>`s2_repr_in_${i+1}`),
   ...Array.from({length:4},(_,i)=>`s2_threat_out_${i+1}`),
   ...Array.from({length:4},(_,i)=>`s2_threat_in_${i+1}`),
+  // S2 indices
+  "s2_traits_in_mean","s2_traits_out_mean","s2_traits_diff",
+  "s2_affect_diff",
+  "s2_dist_in_mean","s2_dist_out_mean","s2_dist_diff",
+  "s2_coop_in_mean","s2_coop_out_mean","s2_coop_diff",
+  "s2_repr_in_mean","s2_repr_out_mean","s2_repr_diff",
+  "s2_threat_in_mean","s2_threat_out_mean","s2_threat_diff",
+  "s2_polar_index",
+  // Deltas
+  "delta_polar","delta_traits","delta_affect","delta_dist","delta_coop","delta_repr","delta_threat",
+  // Game
   "game_enjoyment","game_engagement","game_frequency","game_guess",
 ];
 
@@ -140,7 +165,7 @@ function getResponses() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); } catch { return []; }
 }
 
-function upsertResponse(session) {
+export function upsertResponse(session) {
   const responses = getResponses();
   const idx = responses.findIndex(r => r.session_id === session.session_id);
   if (idx >= 0) {
@@ -159,6 +184,64 @@ export function getCurrentSession() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
 }
 
+/* ════════════════════════ INDEX COMPUTATION ════════════════════════════ */
+const r3 = v => Math.round(v * 1000) / 1000;
+
+function avg(arr) {
+  const valid = arr.filter(v => v != null);
+  if (!valid.length) return 0;
+  return valid.reduce((s, v) => s + v, 0) / valid.length;
+}
+
+function computeIndices(pfx, traitsOut, traitsIn, affectOut, affectIn,
+                                distOut, distIn, coopOut, coopIn,
+                                reprOut,  reprIn,  threatOut, threatIn) {
+  const trOutM   = r3(avg(traitsOut));
+  const trInM    = r3(avg(traitsIn));
+  const trDiff   = r3(trInM - trOutM);
+
+  const affDiff  = r3((affectIn ?? 0) - (affectOut ?? 0));
+
+  const distOutM = r3(avg(distOut));
+  const distInM  = r3(avg(distIn));
+  const distDiff = r3(distInM - distOutM);
+
+  const coopOutM = r3(avg(coopOut));
+  const coopInM  = r3(avg(coopIn));
+  const coopDiff = r3(coopInM - coopOutM);
+
+  const reprOutM = r3(avg(reprOut));   // reversed: out − in
+  const reprInM  = r3(avg(reprIn));
+  const reprDiff = r3(reprOutM - reprInM);
+
+  const thrOutM  = r3(avg(threatOut)); // reversed: out − in
+  const thrInM   = r3(avg(threatIn));
+  const thrDiff  = r3(thrOutM - thrInM);
+
+  /* polar_index = mean of normalised diffs; threat excluded (it's a mediator) */
+  const polarIdx = r3((trDiff/6 + affDiff/6 + distDiff/4 + coopDiff/4 + reprDiff/4) / 5);
+
+  return {
+    [`${pfx}_traits_in_mean`]:  trInM,
+    [`${pfx}_traits_out_mean`]: trOutM,
+    [`${pfx}_traits_diff`]:     trDiff,
+    [`${pfx}_affect_diff`]:     affDiff,
+    [`${pfx}_dist_in_mean`]:    distInM,
+    [`${pfx}_dist_out_mean`]:   distOutM,
+    [`${pfx}_dist_diff`]:       distDiff,
+    [`${pfx}_coop_in_mean`]:    coopInM,
+    [`${pfx}_coop_out_mean`]:   coopOutM,
+    [`${pfx}_coop_diff`]:       coopDiff,
+    [`${pfx}_repr_in_mean`]:    reprInM,
+    [`${pfx}_repr_out_mean`]:   reprOutM,
+    [`${pfx}_repr_diff`]:       reprDiff,
+    [`${pfx}_threat_in_mean`]:  thrInM,
+    [`${pfx}_threat_out_mean`]: thrOutM,
+    [`${pfx}_threat_diff`]:     thrDiff,
+    [`${pfx}_polar_index`]:     polarIdx,
+  };
+}
+
 /* ════════════════════════ COOKIE UTILS ═════════════════════════════════ */
 function getCookie(name) {
   return document.cookie.split(";").some(c => c.trim().startsWith(name + "="));
@@ -174,7 +257,7 @@ function computeIngroup(dir) {
   return dir <= 2 ? "disapprove" : "approve";
 }
 
-function getGroupText(ingroup) {
+export function getGroupText(ingroup) {
   if (ingroup === "disapprove") {
     return {
       inTxt:  "людей, которые считают, что дела в России идут в неправильном направлении",
@@ -584,6 +667,10 @@ export default function Survey({ type, onComplete }) {
       ...Object.fromEntries(ans.threatIn.map( (v,i) => [`s1_threat_in_${i+1}`,  v])),
       ...Object.fromEntries(ans.contactOut.map((v,i) => [`s1_contact_out_${i+1}`, v])),
       ...Object.fromEntries(ans.contactIn.map( (v,i) => [`s1_contact_in_${i+1}`,  v])),
+      ...computeIndices("s1",
+          ans.traitsOut, ans.traitsIn, ans.affectOut, ans.affectIn,
+          ans.distOut,   ans.distIn,   ans.coopOut,   ans.coopIn,
+          ans.reprOut,   ans.reprIn,   ans.threatOut,  ans.threatIn),
     };
     saveCurrentSession(updated);
     upsertResponse(updated);
@@ -591,6 +678,10 @@ export default function Survey({ type, onComplete }) {
 
   function saveS2() {
     const current = getCurrentSession() || {};
+    const s2idx = computeIndices("s2",
+      ans.traitsOut, ans.traitsIn, ans.affectOut, ans.affectIn,
+      ans.distOut,   ans.distIn,   ans.coopOut,   ans.coopIn,
+      ans.reprOut,   ans.reprIn,   ans.threatOut,  ans.threatIn);
     const updated = {
       ...current,
       status: "complete",
@@ -609,6 +700,14 @@ export default function Survey({ type, onComplete }) {
       ...Object.fromEntries(ans.reprIn.map(   (v,i) => [`s2_repr_in_${i+1}`,    v])),
       ...Object.fromEntries(ans.threatOut.map((v,i) => [`s2_threat_out_${i+1}`, v])),
       ...Object.fromEntries(ans.threatIn.map( (v,i) => [`s2_threat_in_${i+1}`,  v])),
+      ...s2idx,
+      delta_polar:  r3((s2idx.s2_polar_index || 0) - (current.s1_polar_index  || 0)),
+      delta_traits: r3((s2idx.s2_traits_diff || 0) - (current.s1_traits_diff  || 0)),
+      delta_affect: r3((s2idx.s2_affect_diff || 0) - (current.s1_affect_diff  || 0)),
+      delta_dist:   r3((s2idx.s2_dist_diff   || 0) - (current.s1_dist_diff    || 0)),
+      delta_coop:   r3((s2idx.s2_coop_diff   || 0) - (current.s1_coop_diff    || 0)),
+      delta_repr:   r3((s2idx.s2_repr_diff   || 0) - (current.s1_repr_diff    || 0)),
+      delta_threat: r3((s2idx.s2_threat_diff || 0) - (current.s1_threat_diff  || 0)),
       game_enjoyment:  ans.gameEnjoyment,
       game_engagement: ans.gameEngagement,
       game_frequency:  ans.gameFrequency,

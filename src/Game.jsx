@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./index.css";
 import Tutorial from "./Tutorial.jsx";
-import Survey, { ExportScreen, getCurrentSession, saveCurrentSession } from "./Survey.jsx";
+import Survey, { ExportScreen, getCurrentSession, saveCurrentSession, upsertResponse, getGroupText } from "./Survey.jsx";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -100,6 +100,36 @@ const AVATARS=[
   {id:"av5",color:"#8b5cf6",letter:"E"},{id:"av6",color:"#06b6d4",letter:"F"},
   {id:"av7",color:"#f0c040",letter:"G"},{id:"av8",color:"#e08050",letter:"H"},
 ];
+/* ── Experimental conditions & avatar system ─────────────────────────── */
+const CONDITIONS = ["cond_1","cond_2","cond_3","cond_4"];
+function assignCondition() { return CONDITIONS[Math.floor(Math.random()*4)]; }
+
+const AVATAR_MANIFEST = {
+  approve:    ["av1.svg","av2.svg","av3.svg"],
+  disapprove: ["av1.svg","av2.svg","av3.svg"],
+  neutral:    ["av1.svg","av2.svg","av3.svg"],
+  control:    ["av1.svg","av2.svg","av3.svg"],
+};
+function pickAvatar(folder) {
+  const files = AVATAR_MANIFEST[folder];
+  return `/assets/avatars/${folder}/${files[Math.floor(Math.random()*files.length)]}`;
+}
+function assignAvatars(condition, ingroup) {
+  const outFolder = ingroup === "approve" ? "disapprove" : "approve";
+  const inFolder  = ingroup; // "approve" or "disapprove"
+  const partnerFolder =
+    condition === "cond_4" ? "control" : outFolder;
+  const oppFolder =
+    condition === "cond_1" ? inFolder :
+    condition === "cond_2" ? outFolder :
+    condition === "cond_3" ? "neutral" : "control";
+  return {
+    avatar_partner:    pickAvatar(partnerFolder),
+    avatar_opponent_1: pickAvatar(oppFolder),
+    avatar_opponent_2: pickAvatar(oppFolder),
+  };
+}
+
 const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
 const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
 const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
@@ -553,6 +583,62 @@ function EffectBadges({poison,bleed}){
 }
 
 /* ── Main App ─────────────────────────────────────────────────────────────── */
+/* ── Condition Brief screen shown between Survey1 and game start ─────── */
+function ConditionBriefScreen({ condition, ingroup, partnerAvatar, onStart }) {
+  const gt = getGroupText(ingroup);
+  let partnerLine, opponentLine;
+  if (condition === "cond_4") {
+    partnerLine  = "В этой игре вы будете играть в одной команде с другим участником.";
+    opponentLine = "Вместе вы будете играть против другой команды.";
+  } else {
+    partnerLine = `В этой игре вы будете играть в одной команде с человеком, который считает, что дела в России идут в ${gt.outDir} направлении.`;
+    if (condition === "cond_1")
+      opponentLine = `Вместе вы будете играть против команды, которая считает, что дела в России идут в ${gt.inDir} направлении.`;
+    else if (condition === "cond_2")
+      opponentLine = `Вместе вы будете играть против другой команды, участники которой также считают, что дела в России идут в ${gt.outDir} направлении.`;
+    else
+      opponentLine = "Вместе вы будете играть против команды, участники которой не определились со своей позицией по поводу происходящего в стране.";
+  }
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(6,4,2,0.97)",display:"flex",
+      alignItems:"center",justifyContent:"center",zIndex:1500,backdropFilter:"blur(8px)",
+      padding:"32px 16px"}}>
+      <div style={{background:"#faf8f4",borderRadius:12,padding:"44px 48px",maxWidth:600,
+        width:"100%",fontFamily:"Georgia, serif",boxShadow:"0 24px 80px rgba(0,0,0,0.7)",
+        animation:"scaleIn 0.25s ease"}}>
+        <div style={{fontSize:18,fontWeight:700,color:"#1a1410",marginBottom:28,
+          borderBottom:"2px solid #e8e4de",paddingBottom:14}}>
+          Ваша команда
+        </div>
+        <div style={{display:"flex",gap:24,alignItems:"flex-start",marginBottom:28}}>
+          <img src={partnerAvatar} alt="Партнёр"
+            style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",flexShrink:0,
+              border:"3px solid #e8e4de",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}/>
+          <div>
+            <div style={{fontSize:11,letterSpacing:1.5,color:"#b0a898",marginBottom:8,fontFamily:"Georgia,serif"}}>
+              ВАШ ПАРТНЁР
+            </div>
+            <div style={{fontSize:14,lineHeight:1.75,color:"#3a3228",marginBottom:14,fontFamily:"Georgia,serif"}}>
+              {partnerLine}
+            </div>
+            <div style={{fontSize:14,lineHeight:1.75,color:"#3a3228",fontFamily:"Georgia,serif"}}>
+              {opponentLine}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
+          <button onClick={onStart} style={{background:"linear-gradient(135deg,#1a3a5c,#2d6496)",
+            color:"#fff",border:"none",borderRadius:8,padding:"13px 46px",fontSize:14,
+            fontWeight:700,letterSpacing:0.5,cursor:"pointer",fontFamily:"Georgia,serif",
+            boxShadow:"0 4px 20px rgba(45,100,150,0.3)",transition:"all 0.2s"}}>
+            Начать игру →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
   const [showTutorial,setShowTutorial]=useState(()=>localStorage.getItem("tutorialDone")!=="true");
   const [gameInit]=useState(createGameInit);
@@ -610,6 +696,9 @@ export default function App(){
   const [survey1Data,setSurvey1Data]=useState(null);
   const [survey2Data,setSurvey2Data]=useState(null);
   const [showExport,setShowExport]=useState(false);
+  const [showCondBrief,setShowCondBrief]=useState(false);
+  const [condition,setCondition]=useState(null);
+  const [gameAvatars,setGameAvatars]=useState(null); // {avatar_partner, avatar_opponent_1, avatar_opponent_2}
 
   useEffect(()=>{setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
@@ -1192,8 +1281,11 @@ export default function App(){
                   <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
                     background:`radial-gradient(circle,${ring}44,rgba(0,0,0,0.7))`,
                     display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:16,opacity:isDead?0.2:1,border:`2px solid ${ring}55`}}>
-                    {name.charAt(0)}
+                    fontSize:16,opacity:isDead?0.2:1,border:`2px solid ${ring}55`,overflow:"hidden"}}>
+                    {gameAvatars?.[key==="e1"?"avatar_opponent_1":"avatar_opponent_2"]
+                      ?<img src={gameAvatars[key==="e1"?"avatar_opponent_1":"avatar_opponent_2"]}
+                          alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      :name.charAt(0)}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -1239,7 +1331,11 @@ export default function App(){
                 <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
                   background:"radial-gradient(circle,rgba(76,175,130,0.3),rgba(0,0,0,0.7))",
                   display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:16,opacity:gs.alex.hp<=0?0.2:1,border:"2px solid rgba(76,175,130,0.4)"}}>А</div>
+                  fontSize:16,opacity:gs.alex.hp<=0?0.2:1,border:"2px solid rgba(76,175,130,0.4)",overflow:"hidden"}}>
+                  {gameAvatars?.avatar_partner
+                    ?<img src={gameAvatars.avatar_partner} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    :"А"}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
@@ -1324,7 +1420,11 @@ export default function App(){
             borderRadius:10,padding:14,display:"flex",flexDirection:"column"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
               <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#2a7048,#4caf82)",
-                display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif"}}>А</div>
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif",overflow:"hidden"}}>
+                {gameAvatars?.avatar_partner
+                  ?<img src={gameAvatars.avatar_partner} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  :"А"}
+              </div>
               <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — АЛЕКС</div>
               {loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
             </div>
@@ -1691,11 +1791,37 @@ export default function App(){
           </div>
         </div>)}
 
+      {/* Condition brief — shown after Survey1 before game */}
+      {showCondBrief&&condition&&survey1Data&&(
+        <ConditionBriefScreen
+          condition={condition}
+          ingroup={survey1Data.ingroup}
+          partnerAvatar={gameAvatars?.avatar_partner}
+          onStart={()=>setShowCondBrief(false)}
+        />
+      )}
+
       {/* Tutorial overlay */}
-      {showTutorial&&!showSetup&&!showSurvey1&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+      {showTutorial&&!showSetup&&!showSurvey1&&!showCondBrief&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
 
       {/* Pre-game survey — shown after setup, before game */}
-      {showSurvey1&&!showSetup&&<Survey type="pre" onComplete={data=>{setSurvey1Data(data);setShowSurvey1(false);}}/>}
+      {showSurvey1&&!showSetup&&<Survey type="pre" onComplete={data=>{
+        setSurvey1Data(data);
+        setShowSurvey1(false);
+        const cond = assignCondition();
+        const avatars = assignAvatars(cond, data.ingroup);
+        setCondition(cond);
+        setGameAvatars(avatars);
+        /* stamp condition + avatars into the session record */
+        const session = getCurrentSession();
+        if(session){
+          const updated = {...session, condition:cond, avatar_self:playerAvatar,
+            nick_self:playerName, ...avatars};
+          saveCurrentSession(updated);
+          upsertResponse(updated);
+        }
+        setShowCondBrief(true);
+      }}/>}
 
       {/* Post-game survey — shown after game ends, above game-over screen */}
       {showSurvey2&&<Survey type="post" onComplete={data=>{setSurvey2Data(data);setShowSurvey2(false);}}/>}
