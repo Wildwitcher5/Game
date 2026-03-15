@@ -553,22 +553,24 @@ export function ExportScreen({ onClose }) {
 */
 export default function Survey({ type, onComplete }) {
   const isPre = type === "pre";
-  const TOTAL = isPre ? 19 : 17;
+  const TOTAL = isPre ? 19 : 16;
 
   const IDX = isPre
     ? { welcome:0, demo:1, dir:2, ingId:3, traitsOut:4, traitsIn:5, affectOut:6, affectIn:7, distOut:8, distIn:9, coopOut:10, coopIn:11, reprOut:12, reprIn:13, threatOut:14, threatIn:15, contactOut:16, contactIn:17, final:18 }
-    : { welcome:0,          dir:1, ingId:2, traitsOut:3, traitsIn:4, affectOut:5, affectIn:6, distOut:7,  distIn:8,  coopOut:9,  coopIn:10, reprOut:11, reprIn:12, threatOut:13, threatIn:14, gameQ:15, final:16 };
+    : { welcome:0,          ingId:1, traitsOut:2, traitsIn:3, affectOut:4, affectIn:5, distOut:6,  distIn:7,  coopOut:8,  coopIn:9,  reprOut:10, reprIn:11, threatOut:12, threatIn:13, gameQ:14, final:15 };
 
   /* Cookie check — pre only */
   const [cookieScreen, setCookieScreen] = useState(() => isPre && getCookie("pol_study_done") ? "check" : null);
 
   const [screen, setScreen] = useState(0);
-  const [ans, setAns] = useState({
+  const [ans, setAns] = useState(() => {
+    const prefillDir = !isPre ? (getCurrentSession()?.s1_direction ?? null) : null;
+    return {
     gender: null,
     age: "",
     education: null,
     income: null,
-    direction: null,
+    direction: prefillDir,
     ingroupId:  [null, null, null],
     traitsOut:  [null, null, null, null, null, null],
     traitsIn:   [null, null, null, null, null, null],
@@ -588,6 +590,7 @@ export default function Survey({ type, onComplete }) {
     gameEngagement: null,
     gameFrequency:  null,
     gameGuess:      "",
+  };
   });
 
   /* Init session on Survey1 mount */
@@ -686,8 +689,8 @@ export default function Survey({ type, onComplete }) {
       ...current,
       status: "complete",
       ts_s2_end: new Date().toISOString(),
-      s2_direction: ans.direction,
-      s2_ingroup:   ingroup,
+      s2_direction: current.s1_direction ?? ans.direction,
+      s2_ingroup:   current.s1_ingroup  ?? ingroup,
       ...Object.fromEntries(ans.traitsOut.map((v,i) => [`s2_traits_out_${i+1}`, v])),
       ...Object.fromEntries(ans.traitsIn.map( (v,i) => [`s2_traits_in_${i+1}`,  v])),
       s2_affect_out: ans.affectOut,

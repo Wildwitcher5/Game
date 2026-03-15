@@ -51,6 +51,8 @@ const ART = {
   revive:   "/assets/cards/revive.jpeg",
   poison:   "/assets/cards/poison.jpeg",
   bleed:    "/assets/cards/bleeding.jpeg",
+  perebor:  "/assets/cards/energy.jpeg",
+  jcounter: "/assets/cards/counter.jpeg",
 };
 
 /* ── API config — set VITE_ANTHROPIC_API_KEY in .env ───────────────────── */
@@ -72,8 +74,10 @@ const CARDS = {
   spy:     {e:"🔍",  n:"ШПИОНАЖ",     d:"Украсть случайную карту из руки врага",    c:"#8b5cf6", t:"enemy", od:1},
   energy:  {e:"⚡",  n:"ЭНЕРГИЯ",     d:"+2 ОД на след. ход",                        c:"#f0d060", t:null,    od:1},
   trap:    {e:"🪤",  n:"ЛОВУШКА",     d:"Ловушка: −10 HP атакующему врагу",         c:"#d97706", t:null,    od:1},
-  counter: {e:"↩️",  n:"КОНТР",       d:"Отразить урон по тебе обратно врагу",      c:"#06b6d4", t:null,    od:1},
-  revive:  {e:"✨",  n:"ВОЗРОЖДЕНИЕ", d:"Воскресить Алекса (30 HP). Только если мёртв",c:"#ffd700",t:null,  od:2},
+  counter:  {e:"↩️",  n:"КОНТР",       d:"Отразить урон по тебе обратно врагу",                           c:"#06b6d4", t:null,    od:1},
+  revive:   {e:"✨",  n:"ВОЗРОЖДЕНИЕ", d:"Воскресить Алекса (30 HP). Только если мёртв",                   c:"#ffd700", t:null,    od:2},
+  perebor:  {e:"🃏",  n:"ПЕРЕБОР",     d:"+2 карты в руку",                                                 c:"#9b59b6", t:null,    od:1},
+  jcounter: {e:"🔰",  n:"КОНТРУДАР",   d:"Отменяет входящий совм. удар. Возвращает 50% урона",             c:"#22d3ee", t:"enemy", od:2},
 };
 
 const DECK_TEMPLATE = [
@@ -87,11 +91,13 @@ const DECK_TEMPLATE = [
   "joint","spy","energy","trap",
   "counter","attack","shield","revive",
   "poison","bleed","attack","double",
+  "perebor","jcounter",
 ];
 const RESHUFFLE_TEMPLATE = [
   "attack","attack","shield","poison",
   "bleed","rage","double","energy",
   "joint","trap","counter","attack",
+  "perebor",
 ];
 const fpCycle=c=>c===1?0:c===2?3:c===3?6:10;
 const ALEX_ACTION_MAP={attack:["attack","double","rage","bleed"],shield:["shield","counter","trap"],heal:["healAlex","revive","energy"]};
@@ -175,7 +181,7 @@ function detectCombo(played){
   return null;
 }
 const initGs=()=>({
-  you: {hp:MHP.you, maxHp:MHP.you, poison:0,bleed:0,trap:false,counter:false},
+  you: {hp:MHP.you, maxHp:MHP.you, poison:0,bleed:0,trap:false,counter:false,jcounter:null},
   alex:{hp:MHP.alex,maxHp:MHP.alex,poison:0,bleed:0},
   e1:  {hp:MHP.e1,  maxHp:MHP.e1,  poison:0,bleed:0},
   e2:  {hp:MHP.e2,  maxHp:MHP.e2,  poison:0,bleed:0},
@@ -697,6 +703,7 @@ export default function App(){
   const [cooperationScore,setCoopScore]=useState(0);
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
+  const setupFileRef=useRef(null);
   const skipTurnRef=useRef(null);
   const deathLoggedRef=useRef(false);
   const animQueueRef=useRef([]);
@@ -704,9 +711,10 @@ export default function App(){
   const [animating,setAnimating]=useState(false);
   const [showSetup,setShowSetup]=useState(()=>!localStorage.getItem("playerSetupDone"));
   const [playerName,setPlayerName]=useState(()=>localStorage.getItem("playerName")||"");
-  const [playerAvatar,setPlayerAvatar]=useState(()=>localStorage.getItem("playerAvatar")||"av1");
+  const [playerAvatar,setPlayerAvatar]=useState(()=>localStorage.getItem("player_avatar")||null);
   const [setupName,setSetupName]=useState("");
-  const [setupAvatar,setSetupAvatar]=useState(null);
+  const [setupAvatarImg,setSetupAvatarImg]=useState(null);
+  const [showDeckPopup,setShowDeckPopup]=useState(false);
   const [showSurvey1,setShowSurvey1]=useState(true);
   const [showSurvey2,setShowSurvey2]=useState(false);
   const [survey1Data,setSurvey1Data]=useState(null);
@@ -893,7 +901,7 @@ export default function App(){
   const askAlexJoint=async t=>{
     setJointTarget(t);setLoad(true);
     setThinking(th=>({...th,alex:true}));
-    await dly(3000+rnd(6000));
+    await dly(1500+rnd(3000));
     setThinking(th=>({...th,alex:false}));
     if(alexHand.includes("joint")){
       addChat("alex","Готов. Бьём вместе!");setJR(true);
@@ -989,6 +997,7 @@ export default function App(){
       const r2=pickCard(newE2h);newE2h=r2.newHand;e2Card=r2.card;
       const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";let d=22;
       if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);d=0;}
+      if(d>0&&ng.you.jcounter){const ret=Math.floor(d/2);ng.e1={...ng.e1,hp:cl(ng.e1.hp-ret,0,999)};hit("e1",ret);logs.push(`🔰 КОНТРУДАР! Совм. удар отменён! Страж −${ret}HP`);ng.you={...ng.you,jcounter:null};d=0;}
       if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Алекса"}: −${d}!`);}
       const fdJ=fpCycle(cycleIn);if(fdJ>0){if(ng.e1.hp>0){ng.e1={...ng.e1,hp:cl(ng.e1.hp-fdJ,0,ng.e1.maxHp)};hit("e1",fdJ);logs.push(`Страж 😓 изнурение: −${fdJ}HP`);}if(ng.e2.hp>0){ng.e2={...ng.e2,hp:cl(ng.e2.hp-fdJ,0,ng.e2.maxHp)};hit("e2",fdJ);logs.push(`Тень 😓 изнурение: −${fdJ}HP`);}}
     } else {
@@ -1000,6 +1009,8 @@ export default function App(){
       if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-5,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −5HP`);hit(k,5);}
       if(ng[k]?.bleed>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-3,0,ng[k].maxHp),bleed:ng[k].bleed-1};logs.push(`🩸 Кровь(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −3HP`);hit(k,3);}
     }
+    // jcounter fallback — not consumed by joint attack → plain 4 HP hit
+    if(ng.you.jcounter){const jct=ng.you.jcounter;if(ng[jct]?.hp>0){ng[jct]={...ng[jct],hp:cl(ng[jct].hp-4,0,ng[jct].maxHp)};hits[jct]=(hits[jct]??0)+4;logs.push(`🔰 Контрудар → ${en(jct)}: −4HP (совм. удара не было)`);}ng.you={...ng.you,jcounter:null};}
     return{ng,hits,e1Card,e2Card,newE1h,newE2h,deck:nd,cycle:nc};
   };
 
@@ -1026,11 +1037,11 @@ export default function App(){
     {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const prevHpSk={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
-    await dly(8000+rnd(27000));
+    await dly(4000+rnd(13500));
     setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
-    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1750);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3500);g=ng;
     for(const[k,d]of Object.entries(eh)){doEvent(k,d,`⚔ ${k==="you"?"Страж → Ты":k==="alex"?"Страж → Алекс":en(k)+" получил урон"} −${d} HP`,'#ff9040');}
     for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHpSk[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
     setGs(g);logs.forEach(addLog);
@@ -1067,6 +1078,7 @@ export default function App(){
     const fatigueDmg=fatiguePerCard*(played.length+(jointCard?1:0));
     if(fatigueDmg>0){g.you={...g.you,hp:cl(g.you.hp-fatigueDmg,0,g.you.maxHp)};doFlash("you",fatigueDmg);logs.push(`😓 Изнурение (цикл ${capturedCycle}): −${fatigueDmg}HP`);}
 
+    const pereborDrawn=[];
     const combo=detectCombo(played);let cr=null;
     if(combo){
       const tgts=played.filter(p=>CARDS[p.card.type].t==="enemy");
@@ -1097,6 +1109,17 @@ export default function App(){
             logs.push(`🔍 Шпионаж: украдена «${CARDS[st].n}» у ${en(target)}`);
           }else{logs.push(`🔍 Шпионаж: у ${en(target)} нет карт`);}
           break;}
+        case"perebor":{
+          const{cards:extra,deck:pd,cycle:pc}=drawFromDeck(2,capturedDeck,capturedCycle);
+          capturedDeck=pd;capturedCycle=pc;
+          pereborDrawn.push(...extra);
+          logs.push("🃏 Перебор: +2 карты в руку");
+          break;}
+        case"jcounter":{
+          g.you={...g.you,jcounter:target};
+          showBanner("🔰 Контрудар готов (против совм. удара)","#22d3ee");
+          logs.push(`Ты 🔰: Контрудар готов → ${en(target)}`);
+          break;}
       }
     }
     if(cr){
@@ -1107,14 +1130,14 @@ export default function App(){
     // Only remove joint card if Alex agreed; otherwise keep it in hand
     let newHand=hand.filter(c=>!played.find(p=>p.card.uid===c.uid));
     if(jointCard&&jointReady){newHand=newHand.filter(c=>c.uid!==jointCard.uid);}
-    newHand=[...newHand,...stolenCards];
+    newHand=[...newHand,...stolenCards,...pereborDrawn];
     setHand(newHand);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
     setPlayed([]);
     if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doEvent(jointTarget,d,`💥 Совместный удар → ${en(jointTarget)} −${d} HP`,'#ff6060');enqueue(async()=>{showComboBanner("Совместный удар",JOINT_IMG);await dly(400);});logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
-    if(Math.random()<0.25){setThinking(t=>({...t,alex:true}));await dly(3000+rnd(3000));setThinking(t=>({...t,alex:false}));}
+    if(Math.random()<0.25){setThinking(t=>({...t,alex:true}));await dly(1500+rnd(1500));setThinking(t=>({...t,alex:false}));}
     const ar=await alexTurnAPI(g,lastMsg,allyLow);addChat("alex",ar.message);setLastMsg("");
     let newAlexH=[...alexHand];
     const alexActionType=ar.actions?.[0]?.type??"";
@@ -1144,11 +1167,11 @@ export default function App(){
     {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
     const prevHp={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
-    await dly(8000+rnd(27000));
+    await dly(4000+rnd(13500));
     setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,localE1h,localE2h,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
-    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
+    setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1750);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3500);g=ng;
     for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${en(k)} −${d} HP`:`⚔ Враги → ${k==="you"?"Ты":"Алекс"} −${d} HP`,'#ff9040');}
     for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHp[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
     setGs(g);logs.forEach(addLog);
@@ -1385,7 +1408,7 @@ export default function App(){
                   )}
                 </div>
                 {/* Trade indicator / initiate button */}
-                <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center"}}>
+                <div style={{marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center",gap:6}}>
                   {tradeOffer&&gs.alex.hp>0?(
                     <div style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",
                       borderRadius:7,border:"1px solid rgba(76,175,130,0.45)",
@@ -1406,6 +1429,13 @@ export default function App(){
                       💱 обмен
                     </button>
                   ):null}
+                  <button onClick={()=>setShowDeckPopup(v=>!v)}
+                    style={{background:"rgba(200,160,80,0.13)",color:"#c8a050",
+                      border:"1.5px solid rgba(200,160,80,0.4)",borderRadius:6,
+                      padding:"6px 13px",fontSize:12,fontWeight:700,cursor:"pointer",
+                      fontFamily:"Georgia,serif",letterSpacing:0.3}}>
+                    🃏 Колода
+                  </button>
                 </div>
               </div>
               {gs.alex.hp>0&&<CardBackRow count={alexHand.length}/>}
@@ -1540,11 +1570,15 @@ export default function App(){
           {playerName&&(
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
               <div style={{width:36,height:36,borderRadius:"50%",flexShrink:0,
-                background:(AVATARS.find(a=>a.id===playerAvatar)||AVATARS[0]).color,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:14,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif",
-                border:"2px solid rgba(255,255,255,0.2)"}}>
-                {(AVATARS.find(a=>a.id===playerAvatar)||AVATARS[0]).letter}
+                background:"rgba(200,160,80,0.1)",
+                border:"2px solid rgba(200,160,80,0.3)",overflow:"hidden",
+                display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {playerAvatar
+                  ?<img src={playerAvatar} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  :<svg viewBox="0 0 100 100" width="100%" height="100%">
+                    <circle cx="50" cy="34" r="22" fill="#8a7050"/>
+                    <ellipse cx="50" cy="96" rx="34" ry="30" fill="#8a7050"/>
+                  </svg>}
               </div>
               <div style={{fontSize:11,color:"#c8b080",fontFamily:"Georgia,serif",fontWeight:700,maxWidth:80,
                 overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playerName}</div>
@@ -1718,6 +1752,56 @@ export default function App(){
         </div>
       )}
 
+      {/* Deck popup */}
+      {showDeckPopup&&(
+        <div style={{position:"fixed",inset:0,zIndex:76,display:"flex",alignItems:"center",
+          justifyContent:"center",background:"rgba(0,0,0,0.72)",backdropFilter:"blur(5px)",
+          animation:"fadeIn 0.2s"}} onClick={()=>setShowDeckPopup(false)}>
+          <div style={{background:"linear-gradient(135deg,#0e0a06,#1a1208)",
+            border:"1px solid rgba(200,160,80,0.35)",borderRadius:14,padding:"24px 28px",
+            maxWidth:460,width:"90%",maxHeight:"70vh",overflowY:"auto",
+            boxShadow:"0 0 50px rgba(200,120,20,0.25)",animation:"scaleIn 0.25s cubic-bezier(.15,1.2,.3,1)"}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <span style={{fontSize:14,fontWeight:900,letterSpacing:3,color:"#c8901c",fontFamily:"Georgia,serif"}}>
+                🃏 КАРТЫ В РУКЕ
+              </span>
+              <button onClick={()=>setShowDeckPopup(false)}
+                style={{background:"transparent",border:"none",color:"#6a5030",fontSize:18,cursor:"pointer",
+                  fontFamily:"Georgia,serif",lineHeight:1,padding:"0 4px"}}>✕</button>
+            </div>
+            {hand.length===0
+              ?<div style={{fontSize:12,color:"#4a3010",fontFamily:"Georgia,serif",textAlign:"center",padding:"16px 0"}}>
+                Рука пуста
+              </div>
+              :hand.map((card,i)=>{
+                const def=CARDS[card.type];
+                return(
+                  <div key={card.uid} style={{display:"flex",gap:12,alignItems:"center",
+                    padding:"9px 12px",borderRadius:8,marginBottom:6,
+                    background:"rgba(200,160,80,0.05)",
+                    border:`1px solid ${def.c}33`}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{def.e}</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:def.c,fontFamily:"Georgia,serif",
+                        marginBottom:2}}>{def.n}</div>
+                      <div style={{fontSize:11,color:"#7a6040",fontFamily:"Georgia,serif",lineHeight:1.4}}>
+                        {def.d}</div>
+                    </div>
+                    <div style={{marginLeft:"auto",flexShrink:0,display:"flex",gap:2}}>
+                      {Array.from({length:def.od},(_,j)=>(
+                        <div key={j} style={{width:10,height:10,borderRadius:"50%",
+                          background:"rgba(60,160,255,0.7)"}}/>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            }
+          </div>
+        </div>
+      )}
+
       {/* Mulligan overlay — only after tutorial is done */}
       {phase==="mulligan"&&!showTutorial&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",display:"flex",
@@ -1866,41 +1950,53 @@ export default function App(){
             color:"#e8d5a0",fontFamily:"Georgia,serif",animation:"scaleIn 0.3s cubic-bezier(.15,1.2,.3,1)",
             boxShadow:"0 0 80px rgba(200,140,20,0.3)"}}>
             <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#c8901c",marginBottom:6}}>КАК ТЕБЯ ЗОВУТ?</div>
-            <div style={{fontSize:12,color:"#6a5030",marginBottom:24}}>Введи имя и выбери аватар</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:24}}>Введи имя и загрузи фото</div>
+            {/* Hidden file input */}
+            <input ref={setupFileRef} type="file" accept="image/*" style={{display:"none"}}
+              onChange={e=>{
+                const file=e.target.files?.[0];if(!file)return;
+                const reader=new FileReader();
+                reader.onload=ev=>setSetupAvatarImg(ev.target.result);
+                reader.readAsDataURL(file);
+              }}/>
+            {/* Avatar upload circle */}
+            <div onClick={()=>setupFileRef.current?.click()}
+              style={{width:100,height:100,borderRadius:"50%",margin:"0 auto 10px",cursor:"pointer",
+                background:"rgba(200,160,80,0.08)",border:"3px solid rgba(200,160,80,0.35)",
+                overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",
+                boxShadow:setupAvatarImg?"0 0 22px rgba(200,140,20,0.45)":"none",
+                transition:"box-shadow 0.25s"}}>
+              {setupAvatarImg
+                ?<img src={setupAvatarImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                :<svg viewBox="0 0 100 100" width="60%" height="60%">
+                  <circle cx="50" cy="34" r="22" fill="#5a4a3a"/>
+                  <ellipse cx="50" cy="96" rx="34" ry="30" fill="#5a4a3a"/>
+                </svg>}
+            </div>
+            <div style={{fontSize:11,color:"#4a3010",marginBottom:20,textAlign:"center"}}>
+              {setupAvatarImg?"✓ Фото загружено · нажми для замены":"Нажми для загрузки фото (необязательно)"}
+            </div>
             <input value={setupName} onChange={e=>setSetupName(e.target.value.slice(0,16))}
               placeholder="Твоё имя…" maxLength={16}
               style={{width:"100%",padding:"10px 14px",background:"rgba(200,160,80,0.08)",
                 border:"1px solid rgba(200,160,80,0.3)",borderRadius:8,fontSize:14,
                 color:"#e8d5a0",outline:"none",fontFamily:"Georgia,serif",
-                boxSizing:"border-box",marginBottom:20,textAlign:"center"}}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-              {AVATARS.map(av=>(
-                <div key={av.id} onClick={()=>setSetupAvatar(av.id)}
-                  style={{width:"100%",aspectRatio:"1",borderRadius:"50%",background:av.color,
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,
-                    color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",
-                    border:setupAvatar===av.id?"3px solid #fff":"3px solid transparent",
-                    boxShadow:setupAvatar===av.id?"0 0 16px rgba(255,255,255,0.5)":"none",
-                    transition:"all 0.15s",transform:setupAvatar===av.id?"scale(1.12)":"none"}}>
-                  {av.letter}
-                </div>
-              ))}
-            </div>
-            <button disabled={!setupName.trim()||!setupAvatar}
+                boxSizing:"border-box",marginBottom:24,textAlign:"center"}}/>
+            <button disabled={!setupName.trim()}
               onClick={()=>{
-                const name=setupName.trim();const av=setupAvatar;
+                const name=setupName.trim();
                 localStorage.setItem("playerSetupDone","true");
                 localStorage.setItem("playerName",name);
-                localStorage.setItem("playerAvatar",av);
-                setPlayerName(name);setPlayerAvatar(av);setShowSetup(false);
+                if(setupAvatarImg) localStorage.setItem("player_avatar",setupAvatarImg);
+                setPlayerName(name);setPlayerAvatar(setupAvatarImg||null);setShowSetup(false);
               }}
-              style={{background:setupName.trim()&&setupAvatar
+              style={{background:setupName.trim()
                 ?"linear-gradient(135deg,#7a4008,#c87820)":"rgba(255,255,255,0.06)",
-                color:setupName.trim()&&setupAvatar?"#fff":"#3a2808",
+                color:setupName.trim()?"#fff":"#3a2808",
                 border:"none",borderRadius:8,padding:"14px 44px",fontSize:14,fontWeight:900,
-                letterSpacing:2,cursor:setupName.trim()&&setupAvatar?"pointer":"default",
+                letterSpacing:2,cursor:setupName.trim()?"pointer":"default",
                 fontFamily:"Georgia,serif",
-                boxShadow:setupName.trim()&&setupAvatar?"0 0 30px rgba(200,120,20,0.5)":"none",
+                boxShadow:setupName.trim()?"0 0 30px rgba(200,120,20,0.5)":"none",
                 transition:"all 0.2s"}}>
               ВОЙТИ В БОЙ →
             </button>
