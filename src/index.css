@@ -106,7 +106,7 @@ button:not(:disabled):hover {
 
 @keyframes arrowBounce {
   0%, 100% { transform: translateY(0) rotate(var(--arrow-rotate, 0deg)); }
-  50%       { transform: translateY(-6px) rotate(var(--arrow-rotate, 0deg)); }
+  50%       { transform: translateY(var(--arrow-dy, -6px)) rotate(var(--arrow-rotate, 0deg)); }
 }
 
 @keyframes bannerFadeIn {

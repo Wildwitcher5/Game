@@ -93,6 +93,12 @@ const RESHUFFLE_TEMPLATE = [
 ];
 const fpCycle=c=>c===1?0:c===2?3:c===3?6:10;
 const ALEX_ACTION_MAP={attack:["attack","double","rage","bleed"],shield:["shield","counter","trap"],heal:["healAlex","revive","energy"]};
+const AVATARS=[
+  {id:"av1",color:"#4c7fe0",letter:"A"},{id:"av2",color:"#e05252",letter:"B"},
+  {id:"av3",color:"#4caf82",letter:"C"},{id:"av4",color:"#e09a3c",letter:"D"},
+  {id:"av5",color:"#8b5cf6",letter:"E"},{id:"av6",color:"#06b6d4",letter:"F"},
+  {id:"av7",color:"#f0c040",letter:"G"},{id:"av8",color:"#e08050",letter:"H"},
+];
 const shuffle=arr=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
 const drawFromDeck=(n,deck,cycle)=>{let d=[...deck],c=cycle;const cards=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}cards.push({uid:nuid(),type:d.shift(),flipIn:true});}return{cards,deck:d,cycle:c};};
 const drawRaw=(n,deck,cycle)=>{let d=[...deck],c=cycle;const types=[];for(let i=0;i<n;i++){if(d.length===0){d=shuffle([...(c>1?RESHUFFLE_TEMPLATE:DECK_TEMPLATE)]);c++;}types.push(d.shift());}return{types,deck:d,cycle:c};};
@@ -273,7 +279,7 @@ function OdPips({cost,canAfford,small=false}){
 
 /* ── Visual deck stack ─────────────────────────────────────────────────────── */
 function DeckStack({count,fatigueCycle}){
-  const fpCard=fatigueCycle===1?0:fatigueCycle===2?3:fatigueCycle===3?6:10;
+  const fpCard=fpCycle(fatigueCycle);
   const layers=count>=12?5:count>=7?3:count>=3?2:count>=1?1:0;
   const W=54,H=76;
   const tip=`Осталось ${count} карт. Цикл: ${fatigueCycle}. Изнурение: ${fpCard} HP за карту`;
@@ -500,7 +506,7 @@ function LogLine({text}){
     icon="▸";color="#5a4a30";
   }
   return(
-    <div style={{display:"flex",gap:6,alignItems:"flex-start",fontSize:11,color,
+    <div style={{display:"flex",gap:6,alignItems:"flex-start",fontSize:12,color,
       padding:"3px 0",fontFamily:"Georgia,serif",
       borderBottom:"1px solid rgba(255,255,255,0.03)",fontWeight:fw,lineHeight:1.45}}>
       <span style={{flexShrink:0,minWidth:16,textAlign:"center"}}>{icon}</span>
@@ -593,8 +599,13 @@ export default function App(){
   const animQueueRef=useRef([]);
   const animPlayingRef=useRef(false);
   const [animating,setAnimating]=useState(false);
+  const [showSetup,setShowSetup]=useState(()=>!localStorage.getItem("playerSetupDone"));
+  const [playerName,setPlayerName]=useState(()=>localStorage.getItem("playerName")||"");
+  const [playerAvatar,setPlayerAvatar]=useState(()=>localStorage.getItem("playerAvatar")||"av1");
+  const [setupName,setSetupName]=useState("");
+  const [setupAvatar,setSetupAvatar]=useState(null);
 
-  useEffect(()=>{setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
+  useEffect(()=>{setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
@@ -957,6 +968,7 @@ export default function App(){
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
+    if(Math.random()<0.25){setThinking(t=>({...t,alex:true}));await dly(3000+rnd(3000));setThinking(t=>({...t,alex:false}));}
     const ar=await alexTurnAPI(g,lastMsg,allyLow);addChat("alex",ar.message);setLastMsg("");
     let newAlexH=[...alexHand];
     const alexActionType=ar.actions?.[0]?.type??"";
@@ -973,7 +985,7 @@ export default function App(){
     {const playerTypes=played.map(p=>p.card.type);let jcFired=false;
     if(playerTypes.includes("shield")&&alexActionType==="shield"){
       g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};
-      doEvent("you",10,"🛡🛡 Стена щитов → Ты +10 HP",'#60d080',true);doEvent("alex",10,"🛡🛡 Стена щитов → Алекс +10 HP",'#60d080',true);
+      doEvent("you",10,"🛡🛡 Стена щитов → Ты +10 HP",'#60d080',true);
       logs.push("🛡️🛡️ СТЕНА ЩИТОВ: команда +10HP!");setCoopScore(s=>s+1);jcFired=true;
     }else if((playerTypes.includes("attack")||playerTypes.includes("rage"))&&alexActionType==="attack"){
       const t3=played.find(p=>p.card.type==="attack"||p.card.type==="rage")?.target??["e1","e2"].find(k=>g[k].hp>0);
@@ -988,7 +1000,7 @@ export default function App(){
     setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
     await dly(8000+rnd(27000));
     setThinking({e1:false,e2:false,alex:false});
-    const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capturedDeck,capturedCycle);
+    const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,localE1h,localE2h,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),3500);setTimeout(()=>setEnemyCard({e1:null,e2:null}),7000);g=ng;
     for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${en(k)} −${d} HP`:`⚔ Враги → ${k==="you"?"Ты":"Алекс"} −${d} HP`,'#ff9040');}
@@ -1065,7 +1077,7 @@ export default function App(){
     setThinking({e1:false,e2:false,alex:false});setAnimating(false);
     animQueueRef.current=[];animPlayingRef.current=false;
     deathLoggedRef.current=false;
-    setChat([{from:"alex",text:"Маллиган: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
+    setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
   };
 
   const isP=phase==="player"&&!loading&&!animating&&gs.you.hp>0;
@@ -1125,7 +1137,7 @@ export default function App(){
             <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
               color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
               animation:phase==="busy"?"pulse 1s infinite":undefined}}>
-              {phase==="mulligan"?"🃏 МАЛЛИГАН":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
+              {phase==="mulligan"?"🃏 СТАРТОВАЯ РУКА":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
             </div>
             <button onClick={()=>{setShowTutorial(true);localStorage.removeItem("tutorialDone");}}
               style={{background:"rgba(200,160,80,0.06)",color:"#6a5030",
@@ -1236,9 +1248,9 @@ export default function App(){
                       setTradeOffer({type:alexHand[idx],idx});
                       setTradeUsed(true);
                       alexSpeak("trade_offer",gs);
-                    }} style={{background:"rgba(76,175,130,0.1)",color:"#4caf82",
-                      border:"1px solid rgba(76,175,130,0.35)",borderRadius:6,
-                      padding:"5px 9px",fontSize:9,cursor:"pointer",fontFamily:"Georgia,serif",
+                    }} style={{background:"rgba(80,140,80,0.25)",color:"#90d090",
+                      border:"2px solid #60a060",borderRadius:6,
+                      padding:"6px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",
                       letterSpacing:0.3}}>
                       💱 обмен
                     </button>
@@ -1261,9 +1273,9 @@ export default function App(){
 
             {/* Log */}
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
-              borderRadius:8,padding:"8px 10px",flex:1}}>
+              borderRadius:8,padding:"8px 10px",flexShrink:0}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:120,overflowY:"auto"}}>
+              <div style={{maxHeight:90,overflowY:"auto"}}>
                 {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
                   :log.slice(-20).map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
@@ -1369,6 +1381,22 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",
           background:"rgba(0,0,0,0.65)",border:"1px solid rgba(200,160,80,0.15)",
           borderRadius:10,flexWrap:"wrap"}}>
+
+          {/* Player avatar + name */}
+          {playerName&&(
+            <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <div style={{width:36,height:36,borderRadius:"50%",flexShrink:0,
+                background:(AVATARS.find(a=>a.id===playerAvatar)||AVATARS[0]).color,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:14,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif",
+                border:"2px solid rgba(255,255,255,0.2)"}}>
+                {(AVATARS.find(a=>a.id===playerAvatar)||AVATARS[0]).letter}
+              </div>
+              <div style={{fontSize:11,color:"#c8b080",fontFamily:"Georgia,serif",fontWeight:700,maxWidth:80,
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playerName}</div>
+            </div>
+          )}
+          {playerName&&<div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>}
 
           {/* HP + player effects */}
           <div data-entity="you" style={{display:"flex",flexDirection:"column",gap:4,minWidth:150}}>
@@ -1544,7 +1572,7 @@ export default function App(){
             border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"36px 48px",textAlign:"center",
             boxShadow:"0 0 60px rgba(200,120,20,0.3)",maxWidth:820}}>
             <div style={{fontSize:22,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
-              color:"#c8901c",marginBottom:6}}>МАЛЛИГАН</div>
+              color:"#c8901c",marginBottom:6}}>СТАРТОВАЯ РУКА</div>
             <div style={{fontSize:12,color:"#6a5030",marginBottom:22,fontFamily:"Georgia,serif"}}>
               Выберите до 2 карт для замены
             </div>
@@ -1638,7 +1666,58 @@ export default function App(){
         </div>)}
 
       {/* Tutorial overlay */}
-      {showTutorial&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+      {showTutorial&&!showSetup&&<Tutorial onEnd={()=>setShowTutorial(false)}/>}
+
+      {/* Player setup screen — shown on first run, before everything */}
+      {showSetup&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(8,5,2,0.97)",display:"flex",
+          alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(8px)"}}>
+          <div style={{background:"linear-gradient(135deg,#1a1208,#2d1f0a)",border:"2px solid #8b6914",
+            borderRadius:12,padding:"40px",maxWidth:480,width:"90%",textAlign:"center",
+            color:"#e8d5a0",fontFamily:"Georgia,serif",animation:"scaleIn 0.3s cubic-bezier(.15,1.2,.3,1)",
+            boxShadow:"0 0 80px rgba(200,140,20,0.3)"}}>
+            <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#c8901c",marginBottom:6}}>КАК ТЕБЯ ЗОВУТ?</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:24}}>Введи имя и выбери аватар</div>
+            <input value={setupName} onChange={e=>setSetupName(e.target.value.slice(0,16))}
+              placeholder="Твоё имя…" maxLength={16}
+              style={{width:"100%",padding:"10px 14px",background:"rgba(200,160,80,0.08)",
+                border:"1px solid rgba(200,160,80,0.3)",borderRadius:8,fontSize:14,
+                color:"#e8d5a0",outline:"none",fontFamily:"Georgia,serif",
+                boxSizing:"border-box",marginBottom:20,textAlign:"center"}}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+              {AVATARS.map(av=>(
+                <div key={av.id} onClick={()=>setSetupAvatar(av.id)}
+                  style={{width:"100%",aspectRatio:"1",borderRadius:"50%",background:av.color,
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,
+                    color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",
+                    border:setupAvatar===av.id?"3px solid #fff":"3px solid transparent",
+                    boxShadow:setupAvatar===av.id?"0 0 16px rgba(255,255,255,0.5)":"none",
+                    transition:"all 0.15s",transform:setupAvatar===av.id?"scale(1.12)":"none"}}>
+                  {av.letter}
+                </div>
+              ))}
+            </div>
+            <button disabled={!setupName.trim()||!setupAvatar}
+              onClick={()=>{
+                const name=setupName.trim();const av=setupAvatar;
+                localStorage.setItem("playerSetupDone","true");
+                localStorage.setItem("playerName",name);
+                localStorage.setItem("playerAvatar",av);
+                setPlayerName(name);setPlayerAvatar(av);setShowSetup(false);
+              }}
+              style={{background:setupName.trim()&&setupAvatar
+                ?"linear-gradient(135deg,#7a4008,#c87820)":"rgba(255,255,255,0.06)",
+                color:setupName.trim()&&setupAvatar?"#fff":"#3a2808",
+                border:"none",borderRadius:8,padding:"14px 44px",fontSize:14,fontWeight:900,
+                letterSpacing:2,cursor:setupName.trim()&&setupAvatar?"pointer":"default",
+                fontFamily:"Georgia,serif",
+                boxShadow:setupName.trim()&&setupAvatar?"0 0 30px rgba(200,120,20,0.5)":"none",
+                transition:"all 0.2s"}}>
+              ВОЙТИ В БОЙ →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Game over */}
       {phase==="over"&&(

@@ -147,19 +147,19 @@ export default function Tutorial({ onEnd }) {
     const spaceRight = vw - rect.right;
 
     if (spaceBelow >= POPUP_H + ARROW_SZ + GAP) {
-      // below
+      // popup is below the element — arrow should point UP at the element
       top = rect.bottom + ARROW_SZ + GAP;
       left = clamp(rect.left + rect.width / 2 - POPUP_W / 2, 10, vw - POPUP_W - 10);
       arTop = rect.bottom + GAP / 2;
       arLeft = rect.left + rect.width / 2 - ARROW_SZ / 2;
-      arRotate = 0;
+      arRotate = 180;
     } else if (spaceAbove >= POPUP_H + ARROW_SZ + GAP) {
-      // above
+      // popup is above the element — arrow should point DOWN at the element
       top = rect.top - POPUP_H - ARROW_SZ - GAP;
       left = clamp(rect.left + rect.width / 2 - POPUP_W / 2, 10, vw - POPUP_W - 10);
       arTop = rect.top - ARROW_SZ - GAP / 2;
       arLeft = rect.left + rect.width / 2 - ARROW_SZ / 2;
-      arRotate = 180;
+      arRotate = 0;
     } else if (spaceRight >= POPUP_W + ARROW_SZ + GAP) {
       // right
       left = rect.right + ARROW_SZ + GAP;
