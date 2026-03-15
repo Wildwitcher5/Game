@@ -79,11 +79,6 @@ button:not(:disabled):hover {
   100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-6px); }
-}
-
 @keyframes hitFlash {
   0%   { filter: brightness(1); }
   20%  { filter: brightness(4) saturate(0) contrast(1.5); }
