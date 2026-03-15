@@ -152,6 +152,25 @@ button:not(:disabled):hover {
   animation: bannerFadeIn 0.2s ease, bannerFadeOut 0.3s ease 1.5s forwards;
 }
 
+.effect-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 6, 2, 0.92);
+  border: 1px solid rgba(180, 130, 40, 0.6);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: #e8d090;
+  font-family: Georgia, serif;
+  font-size: 13px;
+  white-space: pre-line;
+  pointer-events: none;
+  z-index: 800;
+  min-width: 160px;
+  text-align: center;
+}
+
 .combo-banner {
   position: fixed;
   bottom: 220px;

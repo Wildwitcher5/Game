@@ -28,8 +28,11 @@ const COMBO_ARTS = {
   "Ядовитый огонь 🔥☠️": "/assets/piosonrage.jpeg",
   "Засада 🪤⚔️": "/assets/ambush.jpeg",
   "Крепость 🛡️💉": "/assets/fortress.jpeg",
+  "Натиск ⚔️⚔️⚔️": "/assets/onslaught.jpeg",
+  "💥 СОВМЕСТНЫЙ УДАР": "/assets/doublecombo.jpeg",
 };
 const getComboArt = n => COMBO_ARTS[n] ?? COMBO_ART;
+const JOINT_IMG = "/assets/doublecombo.jpeg";
 const CARD_BACK = "/assets/backcard.png";
 const FATIGUE_ICON = "/assets/fatigue.png";
 const ART = {
@@ -38,7 +41,7 @@ const ART = {
   shield:   "/assets/cards/shied.jpeg",
   joint:    "/assets/cards/joint.jpeg",
   trap:     "/assets/cards/trap.jpeg",
-  double:   "/assets/cards/double.jpeg",
+  double:   "/assets/cards/dissection.jpeg",
   spy:      "/assets/cards/spy.jpeg",
   counter:  "/assets/cards/counter.jpeg",
   healAlex: "/assets/cards/heal.jpeg",
@@ -58,7 +61,7 @@ const HAND_SIZE = 4;
 
 const CARDS = {
   attack:  {e:"⚔️",  n:"АТАКА",        d:"−8 HP врагу",                              c:"#e05252", t:"enemy", od:1},
-  double:  {e:"⚔️⚔️",n:"ДВОЙНОЙ",     d:"−8 HP двум врагам",                        c:"#ff7070", t:"enemy", od:2},
+  double:  {e:"⚔️⚔️",n:"РАССЕЧЕНИЕ",   d:"−8 HP двум разным врагам",                 c:"#ff7070", t:"enemy", od:2},
   shield:  {e:"🛡️", n:"ЩИТ",          d:"+10 HP себе",                               c:"#4c7fe0", t:null,    od:1},
   healAlex:{e:"💉",  n:"ИСЦЕЛИТЬ",     d:"+12 HP Алексу",                             c:"#4caf82", t:null,    od:1},
   poison:  {e:"☠️",  n:"ЯД",           d:"Яд: 3 тика по −5 HP",                      c:"#7bc67e", t:"enemy", od:1},
@@ -534,26 +537,38 @@ function LogLine({text}){
 }
 
 /* ── Status effects badges (poison / bleed ticks) ─────────────────────────── */
+const POISON_ICON = "/assets/poisonicon.png";
+const BLEED_ICON  = "/assets/bloodicon.png";
+
+function EffectBadge({type,stacks,color,bg,border}){
+  const [tip,setTip]=useState(false);
+  const totalDmg=type==="poison"?stacks*5:stacks*3;
+  const tipText=type==="poison"
+    ?`Яд: осталось ${stacks} тиков\nЕщё −${totalDmg} HP суммарно`
+    :`Кровотечение: осталось ${stacks} тиков\nЕщё −${totalDmg} HP суммарно`;
+  return(
+    <div style={{position:"relative",display:"inline-flex",alignItems:"center",gap:3,
+      background:bg,border:`1px solid ${border}`,
+      borderRadius:5,padding:"2px 7px",cursor:"default",
+      animation:stacks===1?"pulse 1s infinite":undefined}}
+      onMouseEnter={()=>setTip(true)} onMouseLeave={()=>setTip(false)}>
+      <img src={type==="poison"?POISON_ICON:BLEED_ICON} alt=""
+        className="effect-icon" data-effect={type} data-stacks={stacks}
+        style={{width:14,height:14,objectFit:"contain"}}/>
+      <span style={{fontSize:11,color,fontFamily:"Georgia,serif",fontWeight:700}}>{stacks}</span>
+      {tip&&(
+        <div className="effect-tooltip">{tipText}</div>
+      )}
+    </div>
+  );
+}
+
 function EffectBadges({poison,bleed}){
   if(!poison&&!bleed)return null;
   return(
     <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
-      {poison>0&&(
-        <div style={{display:"flex",alignItems:"center",gap:3,
-          background:"rgba(123,198,126,0.13)",border:"1px solid rgba(123,198,126,0.35)",
-          borderRadius:5,padding:"2px 7px",animation:poison===1?"pulse 1s infinite":undefined}}>
-          <span style={{fontSize:13}}>☠️</span>
-          <span style={{fontSize:11,color:"#7bc67e",fontFamily:"Georgia,serif",fontWeight:700}}>{poison}</span>
-        </div>
-      )}
-      {bleed>0&&(
-        <div style={{display:"flex",alignItems:"center",gap:3,
-          background:"rgba(204,51,68,0.13)",border:"1px solid rgba(204,51,68,0.35)",
-          borderRadius:5,padding:"2px 7px",animation:bleed===1?"pulse 1s infinite":undefined}}>
-          <span style={{fontSize:13}}>🩸</span>
-          <span style={{fontSize:11,color:"#cc3344",fontFamily:"Georgia,serif",fontWeight:700}}>{bleed}</span>
-        </div>
-      )}
+      {poison>0&&<EffectBadge type="poison" stacks={poison} color="#7bc67e" bg="rgba(123,198,126,0.13)" border="rgba(123,198,126,0.35)"/>}
+      {bleed>0&&<EffectBadge type="bleed" stacks={bleed} color="#cc3344" bg="rgba(204,51,68,0.13)" border="rgba(204,51,68,0.35)"/>}
     </div>
   );
 }
@@ -648,9 +663,11 @@ export default function App(){
     el.style.color=color;el.textContent=text;document.body.appendChild(el);
     setTimeout(()=>el.remove(),2000);
   };
-  const showComboBanner=name=>{
+  const showComboBanner=(name,imgSrc=null)=>{
     const el=document.createElement('div');el.className='combo-banner';
-    el.textContent=`✨ КОМБО: ${name.toUpperCase()}`;document.body.appendChild(el);
+    if(imgSrc){const img=document.createElement('img');img.src=imgSrc;img.style.cssText='width:32px;height:32px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:8px;';el.appendChild(img);}
+    el.appendChild(document.createTextNode(`✨ КОМБО: ${name.toUpperCase()}`));
+    document.body.appendChild(el);
     setTimeout(()=>el.remove(),2400);
   };
   const flashEntity=(key,isHeal=false)=>{
@@ -956,7 +973,7 @@ export default function App(){
     newHand=[...newHand,...stolenCards];
     setHand(newHand);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
     setPlayed([]);
-    if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doEvent(jointTarget,d,`💥 Совместный удар → ${en(jointTarget)} −${d} HP`,'#ff6060');logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
+    if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doEvent(jointTarget,d,`💥 Совместный удар → ${en(jointTarget)} −${d} HP`,'#ff6060');enqueue(async()=>{showComboBanner("Совместный удар",JOINT_IMG);await dly(400);});logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
     else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
