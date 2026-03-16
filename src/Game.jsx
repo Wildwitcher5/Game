@@ -3,6 +3,7 @@ import "./index.css";
 import Tutorial from "./Tutorial.jsx";
 import Survey, { getCurrentSession, saveCurrentSession, upsertResponse, getGroupText } from "./Survey.jsx";
 import AVATAR_MANIFEST from "virtual:avatar-manifest";
+import { selectPersona, pickNickname } from "./personas/index.js";
 
 /* ── Embedded assets (frame PNG + crystal PNG — small, needed for card UI) ── */
 const FR = "/assets/card_frame.png";
@@ -529,14 +530,15 @@ function EnemyCardShow({enemyCard}){
   );
 }
 
-function Bubble({m}){
+function Bubble({m,nick}){
   const ia=m.from==="alex";
+  const letter=ia?(nick||"С").charAt(0).toUpperCase():"Я";
   return(
     <div style={{marginBottom:10,display:"flex",gap:7,alignItems:"flex-start",
       flexDirection:ia?"row":"row-reverse",animation:"fadeIn 0.25s"}}>
       <div style={{width:26,height:26,borderRadius:"50%",background:ia?"#4caf82":"#4c7fe0",
         display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,
-        color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>{ia?"С":"Я"}</div>
+        color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>{letter}</div>
       <div style={{fontSize:12,lineHeight:1.6,color:"#c4b090",maxWidth:"88%",
         background:ia?"rgba(76,175,130,0.1)":"rgba(76,127,224,0.1)",
         padding:"8px 11px",borderRadius:8,
@@ -629,7 +631,7 @@ function EffectBadges({poison,bleed}){
 
 /* ── Main App ─────────────────────────────────────────────────────────────── */
 /* ── Condition Brief screen shown between Survey1 and game start ─────── */
-function ConditionBriefScreen({ condition, ingroup, partnerAvatar, onStart }) {
+function ConditionBriefScreen({ condition, ingroup, partnerAvatar, allyNick, onStart }) {
   const gt = getGroupText(ingroup);
   let partnerLine, opponentLine;
   if (condition === "cond_4") {
@@ -664,9 +666,14 @@ function ConditionBriefScreen({ condition, ingroup, partnerAvatar, onStart }) {
               style={{width:"100%",height:"100%",objectFit:"cover"}}/>
           </div>
           <div>
-            <div style={{fontSize:11,letterSpacing:1.5,color:"#b0a898",marginBottom:8,fontFamily:"Georgia,serif"}}>
+            <div style={{fontSize:11,letterSpacing:1.5,color:"#b0a898",marginBottom:4,fontFamily:"Georgia,serif"}}>
               ВАШ СОЮЗНИК
             </div>
+            {allyNick&&allyNick!=="Союзник"&&(
+              <div style={{fontSize:16,fontWeight:700,color:"#1a1410",marginBottom:8,fontFamily:"Georgia,serif"}}>
+                {allyNick}
+              </div>
+            )}
             <div style={{fontSize:14,lineHeight:1.75,color:"#3a3228",marginBottom:14,fontFamily:"Georgia,serif"}}>
               {partnerLine}
             </div>
@@ -751,8 +758,10 @@ export default function App(){
   const [showCondBrief,setShowCondBrief]=useState(false);
   const [condition,setCondition]=useState(null);
   const [gameAvatars,setGameAvatars]=useState(null); // {avatar_partner, avatar_opponent_1, avatar_opponent_2}
+  const [allyNick,setAllyNick]=useState(()=>localStorage.getItem("ally_nick")||"Союзник");
+  const [allyPersona,setAllyPersona]=useState(null);
 
-  useEffect(()=>{setChat([{from:"alex",text:"Союзник: Стартовая рука — выбери до 2 карт для замены, затем нажми «В сечу». Базово 2 ОД за ход!"}]);},[]);
+  useEffect(()=>{setChat([{from:"alex",text:`${allyNick}: норм игра, попробуем)`}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
@@ -770,7 +779,7 @@ export default function App(){
     }
   },[phase]);
 
-  // Restore condition + gameAvatars from session on mount (survives page reload)
+  // Restore condition + gameAvatars + persona from session on mount
   useEffect(()=>{
     const session=getCurrentSession();
     if(session?.condition) setCondition(session.condition);
@@ -780,6 +789,12 @@ export default function App(){
         avatar_opponent_1: session.avatar_opponent_1,
         avatar_opponent_2: session.avatar_opponent_2,
       });
+    }
+    if(session?.ally_nick){
+      setAllyNick(session.ally_nick);
+      // Restore persona so chat works after page reload
+      const ingroup=session.s1_ingroup??(session.ingroup??"");
+      setAllyPersona(selectPersona(session.condition,ingroup));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
@@ -859,6 +874,26 @@ export default function App(){
     enqueue(async()=>{flashEntity(key,isHeal);floatNumber(key,value,isHeal);showBanner(text,color);await dly(600);});
   };
 
+  /* ── DeepSeek helper ─────────────────────────────────────────────────── */
+  const deepseekChat=async(systemPrompt,userMessage,fallback)=>{
+    try{
+      const r=await fetch("/api/deepseek",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"deepseek-chat",
+          max_tokens:100,
+          messages:[
+            {role:"system",content:systemPrompt},
+            {role:"user",content:userMessage},
+          ],
+        }),
+      });
+      const d=await r.json();
+      return d.choices?.[0]?.message?.content??fallback;
+    }catch{return fallback;}
+  };
+
   const usedOd=played.reduce((s,p)=>s+CARDS[p.card.type].od,0)
     +(jointCard?CARDS.joint.od:0);
   const odLeft=od-usedOd;
@@ -889,20 +924,34 @@ export default function App(){
     else{setPlayed(pl=>[...pl,{card,target:tgt}]);setPreview(null);}
   };
 
-  /* ── alexSpeak — situational lines (stub; replace with DeepSeek later) */
-  const alexSpeak=async(eventType,_g)=>{
-    const lines={
-      trade_offer:"Предлагаю обмен — что скажешь?",
-      trade_accepted:"Договорились!",
-      trade_declined:"Ладно, понял.",
-      low_hp:"Держись, нам плохо!",
-      enemy_low_hp:"Добиваем его!",
-      took_heavy_hit:"Ты в порядке? Держись!",
-      victory:"Победа! Отличная работа!",
-      defeat:"Бывает. В следующий раз.",
-      joint_combo:"Вот это удар! Работаем как команда!",
+  /* ── alexSpeak — situational chat via DeepSeek (falls back to FALLBACKS) */
+  const alexSpeak=async(eventType,g)=>{
+    const persona=allyPersona;
+    const nick=allyNick;
+    const fallback=persona?.FALLBACKS?.[eventType]??"Понял.";
+    if(!persona){addChat("alex",fallback);return;}
+    const ctx={
+      allyHp:g?.alex?.hp??"?",
+      youHp:g?.you?.hp??"?",
+      enemies:["e1","e2"].filter(k=>g?.[k]?.hp>0).map(k=>`${en(k)} ${g[k].hp}HP`).join(", ")||"повержены",
     };
-    addChat("alex",lines[eventType]??"Понял.");
+    const hints={
+      trade_offer:"Предложи обменяться картой — скажи что хочешь отдать, в своей манере.",
+      trade_accepted:"Партнёр принял обмен. Отреагируй позитивно, в своей манере.",
+      trade_declined:"Партнёр отказался от обмена. Скажи понимающе.",
+      low_hp:"У кого-то из вас мало HP. Скажи тревожно, в своей манере.",
+      enemy_low_hp:"Враг почти мёртв. Подбодри кратко.",
+      took_heavy_hit:"Партнёр получил сильный удар. Скажи сочувственно.",
+      victory:"Победа! Поздравь кратко, в своей манере.",
+      defeat:"Проигрыш. Утешь кратко, в своей манере.",
+      joint_combo:"Только что сделали совместный удар. Скажи воодушевлённо.",
+    };
+    const text=await deepseekChat(
+      persona.getSystemPrompt(nick,ctx),
+      hints[eventType]??"Скажи что-нибудь уместное по ситуации.",
+      fallback
+    );
+    addChat("alex",text);
   };
 
   /* ── Alex joint ─────────────────────────────────────────────────────── */
@@ -1223,9 +1272,15 @@ export default function App(){
     if(alive.length>0)return{message:"Атакую.",actions:[{type:"attack",target:alive[0]}]};
     return{message:"Жду.",actions:[]};
   };
-  const alexChatAPI=async(_msg,_g)=>{
-    const replies=["Понял, держимся вместе.","Слышу тебя.","Хорошо.","Не отступаем!","Готов к бою."];
-    return replies[Math.floor(Math.random()*replies.length)];
+  const alexChatAPI=async(msg,g)=>{
+    if(!allyPersona)return"Понял.";
+    const ctx={
+      allyHp:g?.alex?.hp??"?",
+      youHp:g?.you?.hp??"?",
+      enemies:["e1","e2"].filter(k=>g?.[k]?.hp>0).map(k=>`${en(k)} ${g[k].hp}HP`).join(", ")||"повержены",
+    };
+    const sys=allyPersona.getSystemPrompt(allyNick,ctx);
+    return deepseekChat(sys,msg,allyPersona.FALLBACKS.trade_declined??"Понял.");
   };
   const sendChat=async()=>{
     const msg=input.trim();if(!msg||loading)return;
@@ -1245,7 +1300,7 @@ export default function App(){
     setThinking({e1:false,e2:false,alex:false});setAnimating(false);
     animQueueRef.current=[];animPlayingRef.current=false;
     deathLoggedRef.current=false;
-    setChat([{from:"alex",text:"Союзник: Стартовая рука — выбери до 2 карт для замены, затем нажми «В сечу»."}]);
+    setChat([{from:"alex",text:`${allyNick}: норм игра, попробуем)`}]);
   };
 
   const isP=phase==="player"&&!loading&&!animating&&gs.you.hp>0;
@@ -1389,13 +1444,13 @@ export default function App(){
                   background:"radial-gradient(circle,rgba(76,175,130,0.3),rgba(0,0,0,0.7))",
                   display:"flex",alignItems:"center",justifyContent:"center",
                   fontSize:16,opacity:gs.alex.hp<=0?0.2:1,border:"2px solid rgba(76,175,130,0.4)",overflow:"hidden"}}>
-                  <AvatarImg src={gameAvatars?.avatar_partner} fallback="А"
+                  <AvatarImg src={gameAvatars?.avatar_partner} fallback={allyNick.charAt(0)}
                     style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
-                      color:gs.alex.hp<=0?"#333":"#d4c4a0"}}>Союзник</span>
+                      color:gs.alex.hp<=0?"#333":"#d4c4a0"}}>{allyNick}</span>
                     <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,
                       background:gs.alex.hp<=0?"rgba(100,0,0,0.3)":"rgba(76,175,130,0.15)",
                       color:gs.alex.hp<=0?"#aa4444":"#4caf82",fontFamily:"Georgia,serif"}}>
@@ -1484,10 +1539,10 @@ export default function App(){
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
               <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,#2a7048,#4caf82)",
                 display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:700,fontFamily:"Georgia,serif",overflow:"hidden"}}>
-                <AvatarImg src={gameAvatars?.avatar_partner} fallback="А"
+                <AvatarImg src={gameAvatars?.avatar_partner} fallback={allyNick.charAt(0)}
                   style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               </div>
-              <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — СОЮЗНИК</div>
+              <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>{`ЧАТ — ${allyNick.toUpperCase()}`}</div>
               {thinking.alex&&<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
                 <div style={{width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>
                 <span style={{fontSize:8,color:"#4caf82",fontFamily:"Georgia,serif"}}>думает...</span>
@@ -1495,12 +1550,12 @@ export default function App(){
               {!thinking.alex&&loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
             </div>
             <div style={{flex:1,overflowY:"auto",marginBottom:10,minHeight:120,maxHeight:280}}>
-              {chat.map((m,i)=><Bubble key={i} m={m}/>)}
+              {chat.map((m,i)=><Bubble key={i} m={m} nick={allyNick}/>)}
               {typing&&(
                 <div style={{marginBottom:10,display:"flex",gap:7,alignItems:"flex-start",animation:"fadeIn 0.25s"}}>
                   <div style={{width:26,height:26,borderRadius:"50%",background:"#4caf82",
                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,
-                    color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>А</div>
+                    color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>{allyNick.charAt(0).toUpperCase()}</div>
                   <div style={{fontSize:18,color:"#4caf82",background:"rgba(76,175,130,0.1)",
                     padding:"6px 14px",borderRadius:8,border:"1px solid rgba(76,175,130,0.25)",
                     animation:"pulse 0.8s infinite",letterSpacing:4}}>···</div>
@@ -1520,7 +1575,7 @@ export default function App(){
             </div>
             <div style={{display:"flex",gap:6}}>
               <input value={input} onChange={e=>setInput(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Написать Союзнику…" disabled={loading}
+                onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder={`Написать ${allyNick}…`} disabled={loading}
                 style={{flex:1,padding:"8px 10px",background:"rgba(200,160,80,0.06)",
                   border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,
                   fontSize:12,color:"#c8b080",outline:"none",fontFamily:"Georgia,serif"}}/>
@@ -1929,6 +1984,7 @@ export default function App(){
           condition={condition}
           ingroup={survey1Data.ingroup}
           partnerAvatar={gameAvatars?.avatar_partner}
+          allyNick={allyNick}
           onStart={()=>setShowCondBrief(false)}
         />
       )}
@@ -1944,11 +2000,17 @@ export default function App(){
         const avatars = assignAvatars(cond, data.ingroup);
         setCondition(cond);
         setGameAvatars(avatars);
-        /* stamp condition + avatars into the session record */
+        /* pick persona + nickname for ally */
+        const persona = selectPersona(cond, data.ingroup);
+        const nick = pickNickname(persona);
+        setAllyPersona(persona);
+        setAllyNick(nick);
+        localStorage.setItem("ally_nick", nick);
+        /* stamp condition + avatars + nick into the session record */
         const session = getCurrentSession();
         if(session){
           const updated = {...session, condition:cond, avatar_self:playerAvatar,
-            nick_self:playerName, ...avatars};
+            nick_self:playerName, ally_nick:nick, ...avatars};
           saveCurrentSession(updated);
           upsertResponse(updated);
         }
