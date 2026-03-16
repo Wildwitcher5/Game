@@ -1460,9 +1460,9 @@ export default function App(){
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
               borderRadius:8,padding:"8px 10px",flexShrink:0}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:200,overflowY:"auto",paddingRight:4,minHeight:80}}>
+              <div style={{maxHeight:300,overflowY:"auto",paddingRight:4,minHeight:120}}>
                 {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
-                  :log.slice(-40).map((l,i)=><LogLine key={i} text={l}/>)}
+                  :log.slice(-60).map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
               </div>
             </div>
