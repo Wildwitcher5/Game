@@ -66,16 +66,16 @@ const CARDS = {
   attack:  {e:"⚔️",  n:"АТАКА",        d:"−8 HP врагу",                              c:"#e05252", t:"enemy", od:1},
   double:  {e:"⚔️⚔️",n:"РАССЕЧЕНИЕ",   d:"−8 HP двум разным врагам",                 c:"#ff7070", t:"enemy", od:2},
   shield:  {e:"🛡️", n:"ЩИТ",          d:"+10 HP себе",                               c:"#4c7fe0", t:null,    od:1},
-  healAlex:{e:"💉",  n:"ИСЦЕЛИТЬ",     d:"+12 HP Алексу",                             c:"#4caf82", t:null,    od:1},
+  healAlex:{e:"💉",  n:"ИСЦЕЛИТЬ",     d:"+12 HP Союзнику",                           c:"#4caf82", t:null,    od:1},
   poison:  {e:"☠️",  n:"ЯД",           d:"Яд: 3 тика по −5 HP",                      c:"#7bc67e", t:"enemy", od:1},
   bleed:   {e:"🩸",  n:"КРОВОТЕЧЕНИЕ", d:"Кровотечение: 4 тика по −3 HP (стакается)", c:"#cc3344", t:"enemy", od:1},
   rage:    {e:"🔥",  n:"ЯРОСТЬ",       d:"−18 HP врагу, −4 HP себе",                 c:"#e06030", t:"enemy", od:2},
-  joint:   {e:"💥",  n:"СОВМ. УДАР",  d:"22 урона (нужно согласие Алекса)",          c:"#e09a3c", t:"enemy", od:1},
+  joint:   {e:"💥",  n:"СОВМ. УДАР",  d:"22 урона (нужно согласие Союзника)",        c:"#e09a3c", t:"enemy", od:1},
   spy:     {e:"🔍",  n:"ШПИОНАЖ",     d:"Украсть случайную карту из руки врага",    c:"#8b5cf6", t:"enemy", od:1},
   energy:  {e:"⚡",  n:"ЭНЕРГИЯ",     d:"+2 ОД на след. ход",                        c:"#f0d060", t:null,    od:1},
   trap:    {e:"🪤",  n:"ЛОВУШКА",     d:"Ловушка: −10 HP атакующему врагу",         c:"#d97706", t:null,    od:1},
   counter:  {e:"↩️",  n:"КОНТР",       d:"Отразить урон по тебе обратно врагу",                           c:"#06b6d4", t:null,    od:1},
-  revive:   {e:"✨",  n:"ВОЗРОЖДЕНИЕ", d:"Воскресить Алекса (30 HP). Только если мёртв",                   c:"#ffd700", t:null,    od:2},
+  revive:   {e:"✨",  n:"ВОЗРОЖДЕНИЕ", d:"Воскресить Союзника (30 HP). Только если мёртв",                 c:"#ffd700", t:null,    od:2},
   perebor:  {e:"🃏",  n:"ПЕРЕБОР",     d:"+2 карты в руку",                                                 c:"#9b59b6", t:null,    od:1},
   jcounter: {e:"🔰",  n:"КОНТРУДАР",   d:"Отменяет входящий совм. удар. Возвращает 50% урона",             c:"#22d3ee", t:"enemy", od:2},
 };
@@ -168,7 +168,7 @@ let _uid=0;
 const nuid=()=>String(++_uid);
 const rnd=n=>Math.floor(Math.random()*n);
 const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-const en=k=>k==="e1"?"Страж":"Тень";
+const en=k=>k==="e1"?"Стражник":"Лазутчик";
 
 // Subset matching: played cards must contain all needed types (may have extras)
 function detectCombo(played){
@@ -218,6 +218,11 @@ function HpBar({hp,maxHp,color,flash}){
 function GameCard({card,selected,dimmed,notEnoughOd,jointPending,comboWith,onPreview,small=false}){
   const def=CARDS[card.type];
   const isJP=jointPending;
+  const [tipVisible,setTipVisible]=useState(false);
+  const tipTimer=useRef(null);
+  const cardCombos=COMBOS.filter(c=>c.needs.includes(card.type));
+  const handleMouseEnter=()=>{tipTimer.current=setTimeout(()=>setTipVisible(true),400);};
+  const handleMouseLeave=()=>{clearTimeout(tipTimer.current);setTipVisible(false);};
   const W=small?100:148;
   const H=W*1.5;
   // Measured pixel-exact from frame PNG (400x600 source)
@@ -230,7 +235,18 @@ function GameCard({card,selected,dimmed,notEnoughOd,jointPending,comboWith,onPre
 
   return(
     <div style={{width:W,height:H,flexShrink:0,position:"relative",
-      animation:card.flipIn?"cardFrontIn 0.8s cubic-bezier(.4,0,.2,1) forwards":"cardPlay 0.8s both"}}>
+      animation:card.flipIn?"cardFrontIn 0.8s cubic-bezier(.4,0,.2,1) forwards":"cardPlay 0.8s both"}}
+      onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {tipVisible&&!small&&cardCombos.length>0&&(
+        <div style={{position:"absolute",bottom:"105%",left:"50%",transform:"translateX(-50%)",
+          zIndex:100,background:"rgba(10,8,5,0.95)",border:"1px solid rgba(224,154,60,0.4)",
+          borderRadius:6,padding:"6px 10px",fontSize:9,color:"#c8a060",fontFamily:"Georgia,serif",
+          whiteSpace:"nowrap",pointerEvents:"none",animation:"fadeIn 0.15s"}}>
+          {cardCombos.map(c=>(
+            <div key={c.name}>{c.needs.map(t=>CARDS[t]?.e||t).join("+")} = {c.name}</div>
+          ))}
+        </div>
+      )}
 
       {/* Card back — shown first during flip */}
       {card.flipIn&&(
@@ -416,13 +432,15 @@ function CardPreview({card,gs,onApply,onTarget,onClose,isP,odLeft,alreadySel}){
             display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
             padding:"4px 8px",textAlign:"center"}}>
             <div style={{fontSize:11,color:"#5a3a18",fontFamily:"Georgia,serif",lineHeight:1.5}}>{def.d}</div>
-            {def.od===2&&<div style={{fontSize:10,color:"#a06010",marginTop:3,fontFamily:"Georgia,serif"}}>⚡ 2 очка действия</div>}
           </div>
           <img src={FR} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"fill",zIndex:2,pointerEvents:"none"}}/>
         </div>
 
         {/* Action buttons BELOW the card */}
         <div style={{display:"flex",flexDirection:"column",gap:8,width:200}}>
+          <div style={{textAlign:"center",fontFamily:"Georgia,serif",fontSize:12,color:"#3cb0ff"}}>
+            {"●".repeat(def.od)} {def.od===1?"1 очко действия":"2 очка действия"}
+          </div>
           {notOd&&<div style={{fontSize:11,color:"#e05252",textAlign:"center",fontFamily:"Georgia,serif"}}>Недостаточно очков действия</div>}
           {alreadySel&&<div style={{fontSize:11,color:"#4caf82",textAlign:"center",fontFamily:"Georgia,serif"}}>✓ Карта выбрана</div>}
 
@@ -437,11 +455,11 @@ function CardPreview({card,gs,onApply,onTarget,onClose,isP,odLeft,alreadySel}){
               {gs.e1.hp>0&&<button onClick={()=>onTarget("e1")} style={{background:"#6a1818",color:"#fff",
                 border:`1px solid ${def.c}88`,borderRadius:7,padding:"10px",fontSize:12,fontWeight:700,
                 cursor:"pointer",fontFamily:"Georgia,serif"}}>
-                → Страж ({gs.e1.hp} HP)</button>}
+                ⚔ Ударить {en("e1")}а ({gs.e1.hp} HP)</button>}
               {gs.e2.hp>0&&<button onClick={()=>onTarget("e2")} style={{background:"#4a1050",color:"#fff",
                 border:`1px solid ${def.c}88`,borderRadius:7,padding:"10px",fontSize:12,fontWeight:700,
                 cursor:"pointer",fontFamily:"Georgia,serif"}}>
-                → Тень ({gs.e2.hp} HP)</button>}
+                ⚔ Ударить {en("e2")}а ({gs.e2.hp} HP)</button>}
             </>
           )}
           {alreadySel&&(
@@ -480,7 +498,7 @@ function EnemyCardShow({enemyCard}){
         animation:"enemyActIn 0.45s cubic-bezier(.15,1.1,.3,1)"}}>
         <div style={{fontSize:16,fontWeight:900,letterSpacing:4,color,fontFamily:"Georgia,serif",
           textShadow:`0 0 28px ${color}dd,0 2px 10px rgba(0,0,0,0.95)`}}>
-          {isE1?"⚔ СТРАЖ ДЕЙСТВУЕТ":"🌑 ТЕНЬ ДЕЙСТВУЕТ"}
+          {isE1?"⚔ СТРАЖНИК ДЕЙСТВУЕТ":"🌑 ЛАЗУТЧИК ДЕЙСТВУЕТ"}
         </div>
         <div style={{position:"relative",width:W,height:H,
           filter:`drop-shadow(0 0 30px ${def.c}bb)drop-shadow(0 0 12px rgba(0,0,0,0.95))`}}>
@@ -518,7 +536,7 @@ function Bubble({m}){
       flexDirection:ia?"row":"row-reverse",animation:"fadeIn 0.25s"}}>
       <div style={{width:26,height:26,borderRadius:"50%",background:ia?"#4caf82":"#4c7fe0",
         display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,
-        color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>{ia?"А":"Я"}</div>
+        color:"#fff",fontWeight:700,flexShrink:0,fontFamily:"Georgia,serif"}}>{ia?"С":"Я"}</div>
       <div style={{fontSize:12,lineHeight:1.6,color:"#c4b090",maxWidth:"88%",
         background:ia?"rgba(76,175,130,0.1)":"rgba(76,127,224,0.1)",
         padding:"8px 11px",borderRadius:8,
@@ -529,10 +547,19 @@ function Bubble({m}){
 }
 
 function LogLine({text}){
+  if(text.startsWith("──")){
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",opacity:0.5}}>
+        <div style={{flex:1,borderTop:"1px solid rgba(200,160,80,0.07)"}}/>
+        <span style={{fontSize:8,color:"#2a1808",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{text}</span>
+        <div style={{flex:1,borderTop:"1px solid rgba(200,160,80,0.07)"}}/>
+      </div>
+    );
+  }
   let icon,color,fw=400;
   if(text.includes("КОМБО")||text.includes("СТЕНА")||text.includes("НАТИСК")||text.includes("ЦЕПЬ")){
     icon="✨";color="#e09a3c";fw=700;
-  } else if(text.includes("Алекс")||text.includes("СОВМЕСТНЫЙ")||text.includes("👥")){
+  } else if(text.includes("Союзник")||text.includes("СОВМЕСТНЫЙ")||text.includes("👥")){
     icon="👥";color="#4caf82";
   } else if(text.includes("изнурение")||text.includes("😓")){
     icon="⚠️";color="#c06030";
@@ -542,7 +569,7 @@ function LogLine({text}){
     icon="🛡️";color="#4c7fe0";
   } else if(text.includes("Ты")){
     icon="⚔️";color="#6090e0";
-  } else if(text.includes("Страж")||text.includes("Тень")||text.includes("ВРАГИ")){
+  } else if(text.includes("Стражник")||text.includes("Лазутчик")||text.includes("ВРАГИ")){
     icon="⚔️";color="#a04040";
   } else {
     icon="▸";color="#5a4a30";
@@ -638,7 +665,7 @@ function ConditionBriefScreen({ condition, ingroup, partnerAvatar, onStart }) {
           </div>
           <div>
             <div style={{fontSize:11,letterSpacing:1.5,color:"#b0a898",marginBottom:8,fontFamily:"Georgia,serif"}}>
-              ВАШ ПАРТНЁР
+              ВАШ СОЮЗНИК
             </div>
             <div style={{fontSize:14,lineHeight:1.75,color:"#3a3228",marginBottom:14,fontFamily:"Georgia,serif"}}>
               {partnerLine}
@@ -703,6 +730,7 @@ export default function App(){
   const [cooperationScore,setCoopScore]=useState(0);
   const chatEnd=useRef(null);
   const logEnd=useRef(null);
+  const prevPhaseRef=useRef(phase);
   const setupFileRef=useRef(null);
   const skipTurnRef=useRef(null);
   const deathLoggedRef=useRef(false);
@@ -724,7 +752,7 @@ export default function App(){
   const [condition,setCondition]=useState(null);
   const [gameAvatars,setGameAvatars]=useState(null); // {avatar_partner, avatar_opponent_1, avatar_opponent_2}
 
-  useEffect(()=>{setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой». Базово 2 ОД за ход!"}]);},[]);
+  useEffect(()=>{setChat([{from:"alex",text:"Союзник: Стартовая рука — выбери до 2 карт для замены, затем нажми «В сечу». Базово 2 ОД за ход!"}]);},[]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
   useEffect(()=>{logEnd.current?.scrollIntoView({behavior:"smooth"});},[log]);
   // Keep ref to latest skipTurn to avoid stale closure in auto-skip effect
@@ -757,6 +785,14 @@ export default function App(){
   },[]);
 
   // Ctrl+Shift+E shortcut removed — export is now at /api/export-csv?secret=YOUR_SECRET
+  // Banner when turn becomes player's after busy phase
+  useEffect(()=>{
+    if(phase==="player"&&prevPhaseRef.current==="busy"){
+      showBanner("▶ ТВОЙ ХОД","#4caf82");
+    }
+    prevPhaseRef.current=phase;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[phase]);
   // Auto-skip when player is dead but game continues (log only once)
   useEffect(()=>{
     if(phase==="player"&&gs.you.hp<=0&&!loading){
@@ -853,22 +889,10 @@ export default function App(){
     else{setPlayed(pl=>[...pl,{card,target:tgt}]);setPreview(null);}
   };
 
-  /* ── alexSpeak — situational Alex lines ────────────────────────────── */
-  const alexSpeak=async(eventType,g)=>{
-    setTyping(true);
-    const ctxMap={
-      trade_offer:"Предложи игроку обменяться картой — скажи что хочешь отдать.",
-      trade_accepted:"Игрок принял обмен. Отреагируй позитивно.",
-      trade_declined:"Игрок отказался. Скажи понимающе.",
-      low_hp:"Кто-то из нас почти погиб. Скажи тревожно.",
-      enemy_low_hp:"Враг почти убит. Подбодри кратко.",
-      took_heavy_hit:"Игрок получил сильный удар. Скажи сочувственно.",
-      victory:"Победа! Поздравь кратко.",
-      defeat:"Проигрыш. Скажи утешение.",
-      joint_combo:"Боевой комбо с игроком! Скажи воодушевлённо.",
-    };
-    const fallbackMap={
-      trade_offer:"Хочу предложить обмен — что думаешь?",
+  /* ── alexSpeak — situational lines (stub; replace with DeepSeek later) */
+  const alexSpeak=async(eventType,_g)=>{
+    const lines={
+      trade_offer:"Предлагаю обмен — что скажешь?",
       trade_accepted:"Договорились!",
       trade_declined:"Ладно, понял.",
       low_hp:"Держись, нам плохо!",
@@ -878,16 +902,7 @@ export default function App(){
       defeat:"Бывает. В следующий раз.",
       joint_combo:"Вот это удар! Работаем как команда!",
     };
-    try{
-      const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:80,
-          system:`Алекс, напарник. По-русски, 1 предложение. А${g?.alex?.hp??"?"}HP И${g?.you?.hp??"?"}HP. ${ctxMap[eventType]??"Скажи что-нибудь."}`,
-          messages:[{role:"user",content:"Отреагируй."}]})});
-      const d=await r.json();
-      addChat("alex",d.content?.[0]?.text??fallbackMap[eventType]??"Понял.");
-    }catch{addChat("alex",fallbackMap[eventType]??"Понял.");}
-    setTyping(false);
+    addChat("alex",lines[eventType]??"Понял.");
   };
 
   /* ── Alex joint ─────────────────────────────────────────────────────── */
@@ -947,7 +962,7 @@ export default function App(){
         let d=dmg;
         if(target==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-10,0,999)};hit(actor,10);logs.push(`🪤 Ловушка! ${name} −10HP`);d=0;}
         if(target==="you"&&ng.you.counter&&d>0){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
-        if(d>0){ng[target]={...ng[target],hp:cl(ng[target].hp-d,0,ng[target].maxHp)};hit(target,d);logs.push(`${name} ${emoji}→${target==="you"?"тебя":"Алекса"}: −${d}`);}
+        if(d>0){ng[target]={...ng[target],hp:cl(ng[target].hp-d,0,ng[target].maxHp)};hit(target,d);logs.push(`${name} ${emoji}→${target==="you"?"тебя":"Союзника"}: −${d}`);}
       };
       switch(card){
         case"shield": ng[actor]={...ng[actor],hp:cl(ng[actor].hp+10,0,ng[actor].maxHp)};logs.push(`${name} 🛡️: +10HP`);break;
@@ -960,21 +975,21 @@ export default function App(){
         case"trap": ng[actor]={...ng[actor],trap:true};logs.push(`${name} 🪤: Ловушка!`);break;
         case"counter": ng[actor]={...ng[actor],counter:true};logs.push(`${name} ↩️: Контрудар готов`);break;
         case"poison":
-          if(ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`${name} ☠️→${tgt==="you"?"тебя":"Алекса"}: яд`);}
+          if(ng[tgt].poison===0){ng[tgt]={...ng[tgt],poison:3};logs.push(`${name} ☠️→${tgt==="you"?"тебя":"Союзника"}: яд`);}
           else basicAtk(tgt,8);break;
-        case"bleed": ng[tgt]={...ng[tgt],bleed:(ng[tgt].bleed??0)+4};logs.push(`${name} 🩸→${tgt==="you"?"тебя":"Алекса"}: кровотечение`);break;
+        case"bleed": ng[tgt]={...ng[tgt],bleed:(ng[tgt].bleed??0)+4};logs.push(`${name} 🩸→${tgt==="you"?"тебя":"Союзника"}: кровотечение`);break;
         case"rage":{let d=18;
           if(tgt==="you"&&ng.you.trap){ng.you={...ng.you,trap:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-10,0,999)};hit(actor,10);logs.push(`🪤 Ловушка! ${name} −10HP`);d=0;}
           if(tgt==="you"&&ng.you.counter&&d>0){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
-          if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name} 🔥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}
+          if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name} 🔥→${tgt==="you"?"тебя":"Союзника"}: −${d}`);}
           ng[actor]={...ng[actor],hp:cl(ng[actor].hp-4,0,999)};logs.push(`${name} ярость: −4HP себе`);break;}
         case"double":{const t2=tgt==="you"?"alex":"you";
           basicAtk(tgt,8,"⚔️⚔️");
-          if(ng[t2].hp>0){ng[t2]={...ng[t2],hp:cl(ng[t2].hp-8,0,ng[t2].maxHp)};hit(t2,8);logs.push(`${name} ⚔️→${t2==="you"?"тебя":"Алекса"}: −8`);}break;}
+          if(ng[t2].hp>0){ng[t2]={...ng[t2],hp:cl(ng[t2].hp-8,0,ng[t2].maxHp)};hit(t2,8);logs.push(`${name} ⚔️→${t2==="you"?"тебя":"Союзника"}: −8`);}break;}
         case"joint":
           if(ng[allyKey].hp>0){let d=18;
             if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng[actor]={...ng[actor],hp:cl(ng[actor].hp-d,0,999)};hit(actor,d);logs.push(`↩️ Контрудар! ${name} −${d}HP`);d=0;}
-            if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name}+${en(allyKey)}💥→${tgt==="you"?"тебя":"Алекса"}: −${d}`);}}
+            if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`${name}+${en(allyKey)}💥→${tgt==="you"?"тебя":"Союзника"}: −${d}`);}}
           else basicAtk(tgt,8);break;
         case"spy": newE1h=actor==="e1"?drawInto(newE1h,1):newE1h;newE2h=actor==="e2"?drawInto(newE2h,1):newE2h;logs.push(`${name} 🔍: доп. карта`);break;
         case"energy": newE1h=actor==="e1"?drawInto(newE1h,1):newE1h;newE2h=actor==="e2"?drawInto(newE2h,1):newE2h;logs.push(`${name} ⚡: доп. карта`);break;
@@ -991,7 +1006,7 @@ export default function App(){
       const tgt=ng.you.hp<=ng.alex.hp?"you":"alex";let d=22;
       if(tgt==="you"&&ng.you.counter){ng.you={...ng.you,counter:false};ng.e1={...ng.e1,hp:cl(ng.e1.hp-d,0,999)};hit("e1",d);logs.push(`↩️ Контрудар! Страж −${d}HP`);d=0;}
       if(d>0&&ng.you.jcounter){const ret=Math.floor(d/2);ng.e1={...ng.e1,hp:cl(ng.e1.hp-ret,0,999)};hit("e1",ret);logs.push(`🔰 КОНТРУДАР! Совм. удар отменён! Страж −${ret}HP`);ng.you={...ng.you,jcounter:null};d=0;}
-      if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Алекса"}: −${d}!`);}
+      if(d>0){ng[tgt]={...ng[tgt],hp:cl(ng[tgt].hp-d,0,ng[tgt].maxHp)};hit(tgt,d);logs.push(`💥 ВРАГИ: Совм. удар → ${tgt==="you"?"тебя":"Союзника"}: −${d}!`);}
       const fdJ=fpCycle(cycleIn);if(fdJ>0){if(ng.e1.hp>0){ng.e1={...ng.e1,hp:cl(ng.e1.hp-fdJ,0,ng.e1.maxHp)};hit("e1",fdJ);logs.push(`Страж 😓 изнурение: −${fdJ}HP`);}if(ng.e2.hp>0){ng.e2={...ng.e2,hp:cl(ng.e2.hp-fdJ,0,ng.e2.maxHp)};hit("e2",fdJ);logs.push(`Тень 😓 изнурение: −${fdJ}HP`);}}
     } else {
       if(ng.e1.hp>0){const r=pickCard(newE1h);e1Card=r.card;newE1h=r.newHand;applyEnemyCard(r.card,"e1");const fd1=fpCycle(cycleIn);if(fd1>0&&ng.e1.hp>0){ng.e1={...ng.e1,hp:cl(ng.e1.hp-fd1,0,ng.e1.maxHp)};hit("e1",fd1);logs.push(`Страж 😓 изнурение: −${fd1}HP`);}}
@@ -999,8 +1014,8 @@ export default function App(){
     }
     // Poison + bleed ticks
     for(const k of["you","alex","e1","e2"]){
-      if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-5,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −5HP`);hit(k,5);}
-      if(ng[k]?.bleed>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-3,0,ng[k].maxHp),bleed:ng[k].bleed-1};logs.push(`🩸 Кровь(${k==="you"?"ты":k==="alex"?"Алекс":en(k)}): −3HP`);hit(k,3);}
+      if(ng[k]?.poison>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-5,0,ng[k].maxHp),poison:ng[k].poison-1};logs.push(`☠ Яд(${k==="you"?"ты":k==="alex"?"Союзник":en(k)}): −5HP`);hit(k,5);}
+      if(ng[k]?.bleed>0&&ng[k].hp>0){ng[k]={...ng[k],hp:cl(ng[k].hp-3,0,ng[k].maxHp),bleed:ng[k].bleed-1};logs.push(`🩸 Кровь(${k==="you"?"ты":k==="alex"?"Союзник":en(k)}): −3HP`);hit(k,3);}
     }
     // jcounter fallback — not consumed by joint attack → plain 4 HP hit
     if(ng.you.jcounter){const jct=ng.you.jcounter;if(ng[jct]?.hp>0){ng[jct]={...ng[jct],hp:cl(ng[jct].hp-4,0,ng[jct].maxHp)};hits[jct]=(hits[jct]??0)+4;logs.push(`🔰 Контрудар → ${en(jct)}: −4HP (совм. удара не было)`);}ng.you={...ng.you,jcounter:null};}
@@ -1023,21 +1038,21 @@ export default function App(){
       const pool=ALEX_ACTION_MAP[a.type]??["attack"];
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capDeck,capCycle);capDeck=nd;capCycle=ncy;newAlexH=[...newAlexH,nc];}
-      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=[g.e1.hp>0?"e1":null,g.e2.hp>0?"e2":null].find(Boolean);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Союзник → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Союзник ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Союзник: Щит → +10 HP",'#60d080',true);logs.push("Союзник 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Союзник: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Союзник 💉→тебя: +12HP");}
     }
-    {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    {const fd=fpCycle(capCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Союзник −${fd} HP`,'#ff9040');logs.push(`Союзник 😓 изнурение: −${fd}HP`);}}
     const prevHpSk={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
-    await dly(4000+rnd(13500));
+    await dly(1000+rnd(9000));
     setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,e1Hand,e2Hand,capDeck,capCycle);
     capDeck=eDeck;capCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1750);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3500);g=ng;
-    for(const[k,d]of Object.entries(eh)){doEvent(k,d,`⚔ ${k==="you"?"Страж → Ты":k==="alex"?"Страж → Алекс":en(k)+" получил урон"} −${d} HP`,'#ff9040');}
-    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHpSk[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
-    setGs(g);logs.forEach(addLog);
+    for(const[k,d]of Object.entries(eh)){doEvent(k,d,`⚔ ${k==="you"?"Враг → Ты":k==="alex"?"Враг → Союзник":en(k)+" получил урон"} −${d} HP`,'#ff9040');}
+    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHpSk[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Союзник пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
+    setGs(g);addLog(`── Ход ${turn} завершён ──`);logs.forEach(addLog);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
     // Draw 1 card for player at end of skip turn
     {const{cards:[drawn],deck:d3,cycle:c3}=drawFromDeck(1,capDeck,capCycle);
@@ -1048,12 +1063,12 @@ export default function App(){
     setDrawCooldown(0);setTradeUsed(false);
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
     else if(g.you.hp<=0&&g.alex.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
-    else if(g.alex.hp<=0){addChat("alex","Упал... возроди меня!");setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
+    else if(g.alex.hp<=0){addChat("alex","Я пал... воскреси меня картой Возрождения!");setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
     else{setTurn(t=>t+1);setOd(cl(2+nb-drawCooldown,1,4));setOdBank(0);setPhase(pendingDrawCard?"overflow":"player");}
     setLastActions({
-      e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
-      e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
-      alex:logs.filter(l=>l.startsWith("Алекс")).slice(-1)[0]??"",
+      e1:logs.filter(l=>l.startsWith("Стражник")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
+      e2:logs.filter(l=>l.startsWith("Лазутчик")).slice(-1)[0]??"",
+      alex:logs.filter(l=>l.startsWith("Союзник")).slice(-1)[0]??"",
     });
     setLoad(false);
   };
@@ -1084,7 +1099,7 @@ export default function App(){
       switch(card.type){
         case"attack":{const d=8;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`⚔ Атака → ${en(target)} −${d} HP`,'#ff6060');logs.push(`Ты ⚔️→${en(target)}: −${d}`);break;}
         case"shield":{g.you={...g.you,hp:cl(g.you.hp+10,0,g.you.maxHp)};doEvent("you",10,"💚 Щит → +10 HP",'#60d080',true);logs.push("Ты 🛡️: +10HP");break;}
-        case"healAlex":{if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+12,0,g.alex.maxHp)};doEvent("alex",12,"💚 Исцелить → Алекс +12 HP",'#60d080',true);logs.push("Ты 💉→Алекс: +12HP");}break;}
+        case"healAlex":{if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+12,0,g.alex.maxHp)};doEvent("alex",12,"💚 Исцелить → Союзник +12 HP",'#60d080',true);logs.push("Ты 💉→Союзник: +12HP");}break;}
         case"poison":{if(g[target].hp>0){g[target]={...g[target],poison:3};showBanner(`☠ Яд → ${en(target)}`,'#c060ff');logs.push(`Ты ☠️→${en(target)}: яд`);}break;}
         case"bleed":{if(g[target].hp>0){g[target]={...g[target],bleed:(g[target].bleed??0)+4};showBanner(`🩸 Кровотечение → ${en(target)}`,'#e04040');logs.push(`Ты 🩸→${en(target)}: кровотечение ×4`);}break;}
         case"rage":{const d=18;g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`🔥 Ярость → ${en(target)} −${d} HP`,'#ff6060');g.you={...g.you,hp:cl(g.you.hp-4,0,g.you.maxHp)};doEvent("you",4,"🔥 Отдача −4 HP",'#ff9040');logs.push(`Ты 🔥→${en(target)}: −${d} (−4HP себе)`);break;}
@@ -1092,7 +1107,7 @@ export default function App(){
         case"trap":{g.you={...g.you,trap:true};showBanner("🪤 Ловушка установлена",'#e8d090');logs.push("Ты 🪤: Ловушка установлена");break;}
         case"counter":{g.you={...g.you,counter:true};showBanner("↩️ Контрудар готов",'#e8d090');logs.push("Ты ↩️: Контрудар готов");break;}
         case"double":{const d=8;const ot=["e1","e2"].find(k=>k!==target&&g[k].hp>0)??target;if(g[target].hp>0){g[target]={...g[target],hp:cl(g[target].hp-d,0,999)};doEvent(target,d,`⚔⚔ Двойной → ${en(target)} −${d} HP`,'#ff6060');}if(ot!==target&&g[ot].hp>0){g[ot]={...g[ot],hp:cl(g[ot].hp-d,0,999)};doEvent(ot,d,`⚔⚔ Двойной → ${en(ot)} −${d} HP`,'#ff6060');}logs.push(`Ты ⚔️⚔️→${en(target)}+${en(ot)}: −${d} каждому`);break;}
-        case"revive":{if(g.alex.hp<=0){g.alex={...g.alex,hp:30};logs.push("✨ Алекс возрождён (30HP)!");setReviveAnim(true);setTimeout(()=>setReviveAnim(false),1500);addChat("alex","Я ещё в строю! Спасибо братец.");}break;}
+        case"revive":{if(g.alex.hp<=0){g.alex={...g.alex,hp:30};logs.push("✨ Союзник возрождён (30HP)!");setReviveAnim(true);setTimeout(()=>setReviveAnim(false),1500);addChat("alex","Я ещё в строю! Спасибо братец.");}break;}
         case"spy":{
           const sHand=target==="e1"?localE1h:localE2h;
           if(sHand.length>0){
@@ -1116,7 +1131,7 @@ export default function App(){
       }
     }
     if(cr){
-      if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};doEvent("you",cr.hp,`✨ Комбо → Ты +${cr.hp} HP`,'#60d080',true);doEvent("alex",cr.hp,`✨ Комбо → Алекс +${cr.hp} HP`,'#60d080',true);logs.push(`Комбо: команда +${cr.hp}HP`);}
+      if(cr.self){g.you={...g.you,hp:cl(g.you.hp+cr.hp,0,g.you.maxHp)};g.alex={...g.alex,hp:cl(g.alex.hp+cr.hp,0,g.alex.maxHp)};doEvent("you",cr.hp,`✨ Комбо → Ты +${cr.hp} HP`,'#60d080',true);doEvent("alex",cr.hp,`✨ Комбо → Союзник +${cr.hp} HP`,'#60d080',true);logs.push(`Комбо: команда +${cr.hp}HP`);}
       else if(cr.tgt&&g[cr.tgt].hp>0){g[cr.tgt]={...g[cr.tgt],hp:cl(g[cr.tgt].hp-cr.hp,0,999),poison:cr.poison??g[cr.tgt].poison};doEvent(cr.tgt,cr.hp,`✨ Комбо → ${en(cr.tgt)} −${cr.hp} HP`,'#f0c040');logs.push(`Комбо: ${en(cr.tgt)} −${cr.hp}HP${cr.poison?` + яд×${cr.poison}`:""}`);}
       enqueue(async()=>{showComboBanner(combo.name);await dly(400);});
     }
@@ -1127,7 +1142,7 @@ export default function App(){
     setHand(newHand);setTimeout(()=>setHand(h=>h.map(c=>({...c,flipIn:false}))),700);
     setPlayed([]);
     if(jointCard&&jointTarget&&jointReady){const d=22;if(g[jointTarget].hp>0){g[jointTarget]={...g[jointTarget],hp:cl(g[jointTarget].hp-d,0,999)};doEvent(jointTarget,d,`💥 Совместный удар → ${en(jointTarget)} −${d} HP`,'#ff6060');enqueue(async()=>{showComboBanner("Совместный удар",JOINT_IMG);await dly(400);});logs.push(`💥 СОВМЕСТНЫЙ УДАР → ${en(jointTarget)}: −${d}!`);}}
-    else if(jointCard&&!jointReady)logs.push("💥 Алекс не готов — удар сорвался");
+    else if(jointCard&&!jointReady)logs.push("💥 Союзник не готов — удар сорвался");
     setJC(null);setJR(false);setJointTarget(null);
     const allyLow=g.alex.hp<MHP.alex*0.35||g.you.hp<MHP.you*0.35;
     if(Math.random()<0.25){setThinking(t=>({...t,alex:true}));await dly(1500+rnd(1500));setThinking(t=>({...t,alex:false}));}
@@ -1139,9 +1154,9 @@ export default function App(){
       const usedIdx=newAlexH.findIndex(t=>pool.includes(t));
       if(usedIdx>=0){newAlexH=newAlexH.filter((_,i)=>i!==usedIdx);const{types:[nc],deck:nd,cycle:ncy}=drawRaw(1,capturedDeck,capturedCycle);capturedDeck=nd;capturedCycle=ncy;newAlexH=[...newAlexH,nc];}
       const st=targ=>{if(targ&&g[targ]?.hp>0)return targ;return["e1","e2"].find(k=>g[k].hp>0)??null;};
-      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Алекс → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Алекс ⚔️→${en(t2)}: −${d}`);}}
-      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Алекс: Щит → +10 HP",'#60d080',true);logs.push("Алекс 🛡️: +10HP");}}
-      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Алекс: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Алекс 💉→тебя: +12HP");}
+      if(a.type==="attack"){const t2=st(a.target);if(t2){const d=8;g[t2]={...g[t2],hp:cl(g[t2].hp-d,0,999)};doEvent(t2,d,`⚔ Союзник → ${en(t2)} −${d} HP`,'#40c0ff');logs.push(`Союзник ⚔️→${en(t2)}: −${d}`);}}
+      else if(a.type==="shield"){if(g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp+10,0,g.alex.maxHp)};doEvent("alex",10,"🛡 Союзник: Щит → +10 HP",'#60d080',true);logs.push("Союзник 🛡️: +10HP");}}
+      else if(a.type==="heal"){g.you={...g.you,hp:cl(g.you.hp+12,0,g.you.maxHp)};doEvent("you",12,"💉 Союзник: Исцелить → Ты +12 HP",'#60d080',true);logs.push("Союзник 💉→тебя: +12HP");}
     }
     // Alex-player joint combos
     {const playerTypes=played.map(p=>p.card.type);let jcFired=false;
@@ -1157,17 +1172,17 @@ export default function App(){
       if(t3&&g[t3]?.hp>0){g[t3]={...g[t3],hp:cl(g[t3].hp-8,0,999)};doEvent(t3,8,`💥⚔ Живая цепь → ${en(t3)} −8 HP`,'#ff6060');logs.push(`💥⚔️ ЖИВАЯ ЦЕПЬ: ${en(t3)} −8 доп.!`);setCoopScore(s=>s+1);jcFired=true;}
     }
     if(jcFired)setTimeout(()=>alexSpeak("joint_combo",g),400);}
-    {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Алекс −${fd} HP`,'#ff9040');logs.push(`Алекс 😓 изнурение: −${fd}HP`);}}
+    {const fd=fpCycle(capturedCycle);if(fd>0&&g.alex.hp>0){g.alex={...g.alex,hp:cl(g.alex.hp-fd,0,g.alex.maxHp)};doEvent("alex",fd,`😓 Изнурение → Союзник −${fd} HP`,'#ff9040');logs.push(`Союзник 😓 изнурение: −${fd}HP`);}}
     const prevHp={you:g.you.hp,alex:g.alex.hp,e1:g.e1.hp,e2:g.e2.hp};
     setThinking({e1:g.e1.hp>0,e2:g.e2.hp>0,alex:false});
-    await dly(4000+rnd(13500));
+    await dly(1000+rnd(9000));
     setThinking({e1:false,e2:false,alex:false});
     const{ng,hits:eh,e1Card,e2Card,newE1h,newE2h,deck:eDeck,cycle:eCycle}=enemyAct(g,logs,turn,localE1h,localE2h,capturedDeck,capturedCycle);
     capturedDeck=eDeck;capturedCycle=eCycle;
     setEnemyCard({e1:e1Card,e2:null});setTimeout(()=>setEnemyCard({e1:null,e2:e2Card??null}),1750);setTimeout(()=>setEnemyCard({e1:null,e2:null}),3500);g=ng;
-    for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${en(k)} −${d} HP`:`⚔ Враги → ${k==="you"?"Ты":"Алекс"} −${d} HP`,'#ff9040');}
-    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHp[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Алекс пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
-    setGs(g);logs.forEach(addLog);
+    for(const[k,d]of Object.entries(eh)){const isEnemy=k==="e1"||k==="e2";doEvent(k,d,isEnemy?`⚔ Враги → ${en(k)} −${d} HP`:`⚔ Враги → ${k==="you"?"Ты":"Союзник"} −${d} HP`,'#ff9040');}
+    for(const k of["e1","e2","you","alex"]){if(ng[k].hp<=0&&prevHp[k]>0)enqueue(async()=>{showBanner(`💀 ${k==="you"?"Ты пал":k==="alex"?"Союзник пал":en(k)+" повержен"}`,'#ffffff');await dly(600);});}
+    setGs(g);addLog(`── Ход ${turn} завершён ──`);logs.forEach(addLog);
     setOd(cl(2+nob-drawCooldown,1,4));setOdBank(0);setDrawCooldown(0);
     setE1Hand(newE1h);setE2Hand(newE2h);setAlexHand(newAlexH);
     // Situational alexSpeak (non-blocking)
@@ -1190,36 +1205,27 @@ export default function App(){
     setSharedDeck(capturedDeck);setFatigueCycle(capturedCycle);}
     if(g.e1.hp<=0&&g.e2.hp<=0){setWinner("player");setPhase("over");setTimeout(()=>alexSpeak("victory",g),300);}
     else if(g.you.hp<=0&&g.alex.hp<=0){setWinner("enemy");setPhase("over");setTimeout(()=>alexSpeak("defeat",g),300);}
-    else if(g.alex.hp<=0){addChat("alex","Я упал... возроди меня картой Возрождения!");setTurn(t=>t+1);setTradeUsed(false);setPhase(pendingDrawCard?"overflow":"player");}
+    else if(g.alex.hp<=0){addChat("alex","Я пал... воскреси меня картой Возрождения!");setTurn(t=>t+1);setTradeUsed(false);setPhase(pendingDrawCard?"overflow":"player");}
     else{setTurn(t=>t+1);setTradeUsed(false);setPhase(pendingDrawCard?"overflow":"player");}
     setLastActions({
-      e1:logs.filter(l=>l.startsWith("Страж")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
-      e2:logs.filter(l=>l.startsWith("Тень")).slice(-1)[0]??"",
-      alex:logs.filter(l=>l.startsWith("Алекс")).slice(-1)[0]??"",
+      e1:logs.filter(l=>l.startsWith("Стражник")||l.startsWith("💥 ВРАГИ")).slice(-1)[0]??"",
+      e2:logs.filter(l=>l.startsWith("Лазутчик")).slice(-1)[0]??"",
+      alex:logs.filter(l=>l.startsWith("Союзник")).slice(-1)[0]??"",
     });
     setLoad(false);
   };
 
-  /* ── Alex APIs ──────────────────────────────────────────────────────── */
-  const alexTurnAPI=async(g,lm,al)=>{
-    const le=["e1","e2"].filter(k=>g[k].hp>0).map(k=>`${en(k)} ${g[k].hp}HP`).join(", ");
-    const fb={message:"Атакую.",actions:g.e1.hp>0?[{type:"attack",target:"e1"}]:g.e2.hp>0?[{type:"attack",target:"e2"}]:[]};
-    const sys=`Алекс, напарник. Кратко, по-русски.\nАлекс ${g.alex.hp}/${MHP.alex}HP, Игрок ${g.you.hp<=0?"МЁРТВl":g.you.hp+"/"+ MHP.you+"HP"}. Враги: ${le||"мертвы"}.\n${lm?`Игрок: "${lm}"`:""}${g.you.hp<=0?"\nИГРОК МЁРТВl — используй heal для воскрешения (карта Возрождения)!":al?"\nКРИТИЧНО — лечи союзника!":""}\n1 ОД = 1 действие. JSON: {"message":"","actions":[{"type":"attack","target":"e1"}]}\nTypes: attack(e1/e2),shield,heal. Ровно 1.`;
-    try{
-      const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,system:sys,messages:[{role:"user",content:"Ход."}]})});
-      const d=await r.json();
-      return JSON.parse((d.content?.[0]?.text??"").replace(/```json|```/g,"").trim());
-    }catch{return fb;}
+  /* ── Alex APIs (stubs — replace with DeepSeek later) ───────────────── */
+  const alexTurnAPI=async(g,_lm,al)=>{
+    const alive=["e1","e2"].filter(k=>g[k].hp>0);
+    if(al&&g.alex.hp<40)return{message:"Держусь! Лечу себя.",actions:[{type:"shield"}]};
+    if(g.you.hp<30&&g.alex.hp>20)return{message:"Исцеляю тебя!",actions:[{type:"heal"}]};
+    if(alive.length>0)return{message:"Атакую.",actions:[{type:"attack",target:alive[0]}]};
+    return{message:"Жду.",actions:[]};
   };
-  const alexChatAPI=async(msg,g)=>{
-    try{
-      const r=await fetch(`${API_BASE}/v1/messages`,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:120,
-          system:`Алекс, напарник. Рус., 1-2 предл. А${g.alex.hp}HP И${g.you.hp}HP.`,
-          messages:[{role:"user",content:msg}]})});
-      const d=await r.json();return d.content?.[0]?.text??"Понял.";
-    }catch{return"Понял.";}
+  const alexChatAPI=async(_msg,_g)=>{
+    const replies=["Понял, держимся вместе.","Слышу тебя.","Хорошо.","Не отступаем!","Готов к бою."];
+    return replies[Math.floor(Math.random()*replies.length)];
   };
   const sendChat=async()=>{
     const msg=input.trim();if(!msg||loading)return;
@@ -1239,7 +1245,7 @@ export default function App(){
     setThinking({e1:false,e2:false,alex:false});setAnimating(false);
     animQueueRef.current=[];animPlayingRef.current=false;
     deathLoggedRef.current=false;
-    setChat([{from:"alex",text:"Стартовая рука: выбери до 2 карт для замены, затем нажми «Начать бой»."}]);
+    setChat([{from:"alex",text:"Союзник: Стартовая рука — выбери до 2 карт для замены, затем нажми «В сечу»."}]);
   };
 
   const isP=phase==="player"&&!loading&&!animating&&gs.you.hp>0;
@@ -1294,12 +1300,17 @@ export default function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
           marginBottom:10,borderBottom:"1px solid rgba(200,160,80,0.2)",paddingBottom:8}}>
           <span style={{fontSize:20,fontWeight:900,letterSpacing:4,color:"#c8901c",
-            fontFamily:"Georgia,serif",textShadow:"0 0 20px rgba(200,140,20,0.5)"}}>АЛЬЯНС</span>
+            fontFamily:"Georgia,serif",textShadow:"0 0 20px rgba(200,140,20,0.5)"}}>ДРУЖИНА</span>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
-              color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
-              animation:phase==="busy"?"pulse 1s infinite":undefined}}>
-              {phase==="mulligan"?"🃏 СТАРТОВАЯ РУКА":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ЖДЁМ...":phase==="overflow"?"🃏 ПЕРЕПОЛНЕНИЕ":"■ КОНЕЦ"}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:1}}>
+              <div style={{fontSize:11,letterSpacing:2,fontFamily:"Georgia,serif",
+                color:phase==="player"?"#4caf82":phase==="busy"?"#e09a3c":"#e05252",
+                animation:phase==="busy"?"pulse 1s infinite":undefined}}>
+                {phase==="mulligan"?"🃏 ЖРЕБИЙ":phase==="player"?"▶ ТВОЙ ХОД":phase==="busy"?"⏳ ДЕРЖИМ СТРОЙ...":phase==="overflow"?"🃏 ПОЛНАЯ СУМА":"■ КОНЕЦ"}
+              </div>
+              <div style={{fontSize:8,color:"#3a2808",fontFamily:"Georgia,serif"}}>
+                {phase==="player"?"Выбирай карты и завершай ход":phase==="busy"?"Союзник и враги делают ходы":phase==="mulligan"?"Можно заменить до 2 карт":""}
+              </div>
             </div>
             <button onClick={()=>{setShowTutorial(true);localStorage.removeItem("tutorialDone");}}
               style={{background:"rgba(200,160,80,0.06)",color:"#6a5030",
@@ -1384,7 +1395,7 @@ export default function App(){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",
-                      color:gs.alex.hp<=0?"#333":"#d4c4a0"}}>Алекс</span>
+                      color:gs.alex.hp<=0?"#333":"#d4c4a0"}}>Союзник</span>
                     <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,
                       background:gs.alex.hp<=0?"rgba(100,0,0,0.3)":"rgba(76,175,130,0.15)",
                       color:gs.alex.hp<=0?"#aa4444":"#4caf82",fontFamily:"Georgia,serif"}}>
@@ -1449,9 +1460,9 @@ export default function App(){
             <div style={{background:"rgba(0,0,0,0.5)",border:"1px solid rgba(200,160,80,0.1)",
               borderRadius:8,padding:"8px 10px",flexShrink:0}}>
               <div style={{fontSize:9,letterSpacing:2,color:"#4a3010",marginBottom:5,fontFamily:"Georgia,serif"}}>ЛОГ БИТВЫ</div>
-              <div style={{maxHeight:90,overflowY:"auto"}}>
+              <div style={{maxHeight:200,overflowY:"auto",paddingRight:4,minHeight:80}}>
                 {log.length===0?<div style={{fontSize:11,color:"#2a2010",fontFamily:"Georgia,serif"}}>— бой начинается —</div>
-                  :log.slice(-20).map((l,i)=><LogLine key={i} text={l}/>)}
+                  :log.slice(-40).map((l,i)=><LogLine key={i} text={l}/>)}
                 <div ref={logEnd}/>
               </div>
             </div>
@@ -1461,9 +1472,9 @@ export default function App(){
               <div style={{padding:"10px 12px",background:"rgba(200,154,60,0.08)",border:"1.5px solid rgba(200,154,60,0.35)",borderRadius:10,animation:"fadeIn 0.2s"}}>
                 <div style={{fontSize:11,color:"#e09a3c",fontFamily:"Georgia,serif",marginBottom:3}}>
                   💥 СОВМЕСТНЫЙ УДАР {jointTarget?`→ ${en(jointTarget)}`:""}</div>
-                {loading&&!jointReady&&<div style={{fontSize:10,color:"#888",animation:"pulse 1s infinite"}}>⏳ Спрашиваю Алекса…</div>}
+                {loading&&!jointReady&&<div style={{fontSize:10,color:"#888",animation:"pulse 1s infinite"}}>⏳ Спрашиваю Союзника…</div>}
                 {jointReady&&<div style={{fontSize:11,color:"#4caf82",fontFamily:"Georgia,serif"}}>✓ Готов — завершай ход</div>}
-                {!loading&&!jointReady&&jointTarget&&<div style={{fontSize:11,color:"#e05252",fontFamily:"Georgia,serif"}}>✗ Алекс не готов</div>}
+                {!loading&&!jointReady&&jointTarget&&<div style={{fontSize:11,color:"#e05252",fontFamily:"Georgia,serif"}}>✗ Союзник не готов</div>}
               </div>)}
           </div>
 
@@ -1476,8 +1487,12 @@ export default function App(){
                 <AvatarImg src={gameAvatars?.avatar_partner} fallback="А"
                   style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               </div>
-              <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — АЛЕКС</div>
-              {loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
+              <div style={{fontSize:10,letterSpacing:2,color:"#2a4030",fontFamily:"Georgia,serif"}}>ЧАТ — СОЮЗНИК</div>
+              {thinking.alex&&<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>
+                <span style={{fontSize:8,color:"#4caf82",fontFamily:"Georgia,serif"}}>думает...</span>
+              </div>}
+              {!thinking.alex&&loading&&<div style={{marginLeft:"auto",width:7,height:7,borderRadius:"50%",background:"#4caf82",animation:"pulse 1s infinite"}}/>}
             </div>
             <div style={{flex:1,overflowY:"auto",marginBottom:10,minHeight:120,maxHeight:280}}>
               {chat.map((m,i)=><Bubble key={i} m={m}/>)}
@@ -1494,8 +1509,9 @@ export default function App(){
               <div ref={chatEnd}/>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-              {[["🛡 Прикрой","Прикрой меня!"],["⚔ Бей!","Бей Стража!"],
-                ["💉 Лечи","Похили меня!"],["💥 Совм.","Совместный удар?"]].map(([label,msg])=>(
+              {[["🛡 Прикрой","Прикрой меня!"],["⚔ Бей!","Бей Стражника!"],
+                ["💉 Лечи","Исцели меня!"],["💥 Совм.","Совместный удар?"],
+                ["📖 Комбо?","Какие комбо нам доступны?"]].map(([label,msg])=>(
                 <button key={label} onClick={()=>{if(!loading){addChat("you",msg);setLastMsg(msg);setInput("");setLoad(true);alexChatAPI(msg,gs).then(r=>{addChat("alex",r);setLoad(false);});}}}
                   disabled={loading} style={{background:"rgba(200,160,80,0.06)",border:"1px solid rgba(200,160,80,0.2)",
                   borderRadius:6,padding:"5px 9px",color:loading?"#2a1808":"#8a7050",fontSize:10,
@@ -1504,7 +1520,7 @@ export default function App(){
             </div>
             <div style={{display:"flex",gap:6}}>
               <input value={input} onChange={e=>setInput(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Написать Алексу…" disabled={loading}
+                onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Написать Союзнику…" disabled={loading}
                 style={{flex:1,padding:"8px 10px",background:"rgba(200,160,80,0.06)",
                   border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,
                   fontSize:12,color:"#c8b080",outline:"none",fontFamily:"Georgia,serif"}}/>
@@ -1524,17 +1540,26 @@ export default function App(){
             <div style={{fontSize:10,color:"#5a4020",fontFamily:"Georgia,serif"}}>В руке: {hand.length} / 5</div>
           </div>
           {played.length>0&&(
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,padding:"5px 8px",
-              background:"rgba(200,154,60,0.06)",borderRadius:8,border:"1px solid rgba(200,154,60,0.2)"}}>
-              <span style={{fontSize:9,color:"#8a6020",fontFamily:"Georgia,serif",alignSelf:"center"}}>В ход:</span>
-              {played.map((p,i)=>{
-                const def=CARDS[p.card.type];
-                return <div key={p.card.uid} style={{fontSize:9,background:"rgba(200,154,60,0.15)",
-                  border:`1px solid ${def.c}55`,borderRadius:5,padding:"3px 8px",
-                  color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.8s ${i*0.1}s both`}}>
-                  {def.e} {def.n}{p.target?` →${en(p.target)}`:""}
-                </div>;
-              })}
+            <div style={{marginBottom:8}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",padding:"5px 8px",
+                background:"rgba(200,154,60,0.06)",borderRadius:8,border:"1px solid rgba(200,154,60,0.2)"}}>
+                <span style={{fontSize:9,color:"#8a6020",fontFamily:"Georgia,serif",alignSelf:"center"}}>В ход:</span>
+                {played.map((p,i)=>{
+                  const def=CARDS[p.card.type];
+                  return <div key={p.card.uid} style={{fontSize:9,background:"rgba(200,154,60,0.15)",
+                    border:`1px solid ${def.c}55`,borderRadius:5,padding:"3px 8px",
+                    color:def.c,fontFamily:"Georgia,serif",animation:`cardPlay 0.8s ${i*0.1}s both`}}>
+                    {def.e} {def.n}{p.target?` →${en(p.target)}`:""}
+                  </div>;
+                })}
+                {combo&&<div style={{fontSize:9,background:"rgba(224,154,60,0.2)",
+                  border:"1px solid rgba(224,154,60,0.5)",borderRadius:5,padding:"3px 8px",
+                  color:"#e09a3c",fontFamily:"Georgia,serif",fontWeight:700}}>✨ КОМБО</div>}
+              </div>
+              {combo&&<div style={{fontSize:10,color:"#e09a3c",fontFamily:"Georgia,serif",
+                marginTop:4,textAlign:"center",animation:"pulse 1s infinite",letterSpacing:0.5}}>
+                ✨ КОМБО: {combo.name} — будет применено при завершении хода
+              </div>}
             </div>)}
           <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center",minHeight:80}}>
             {hand.map(card=>{
@@ -1550,7 +1575,7 @@ export default function App(){
           </div>
           {phase==="player"&&!loading&&(
             <div style={{fontSize:9,color:"#3a2808",marginTop:8,textAlign:"center",fontFamily:"Georgia,serif"}}>
-              💡 Нажми карту чтобы выбрать действие и цель
+              💡 Нажми на грамоту, дабы выбрать действие
             </div>)}
         </div>
 
@@ -1591,7 +1616,8 @@ export default function App(){
           <div style={{width:1,height:60,background:"rgba(200,160,80,0.1)",flexShrink:0}}/>
 
           {/* AP crystals */}
-          <div data-tutorial="ap" style={{display:"flex",flexDirection:"column",gap:4}}>
+          <div data-tutorial="ap" style={{display:"flex",flexDirection:"column",gap:4}}
+            title="Очки действия (ОД). Каждая карта стоит 1-2 ОД. В начале хода: +2 ОД. Пропуск хода: +1 ОД сверху.">
             <div style={{fontSize:9,letterSpacing:1,color:"#4a3010",fontFamily:"Georgia,serif"}}>ОЧКИ ДЕЙСТВИЯ</div>
             <div style={{display:"flex",gap:3,alignItems:"center"}}>
               {Array.from({length:od},(_,i)=><Crystal key={i} active={i<odLeft} size={28}/>)}
@@ -1636,16 +1662,16 @@ export default function App(){
             border:"1px solid rgba(200,160,80,0.15)",borderRadius:7,
             padding:"7px 12px",fontSize:9,fontWeight:600,cursor:isP&&!animating?"pointer":"default",
             fontFamily:"Georgia,serif",letterSpacing:0.5,opacity:isP&&!animating?1:0.4}}>
-            ПРОПУСК<br/>+1 ОД
+            ВЫЖДАТЬ<br/>+1 ОД
           </button>
           <button onClick={endTurn} disabled={!canEnd||animating} style={{
             background:canEnd&&!animating?"linear-gradient(135deg,#7a3e00,#d4841a)":"rgba(255,255,255,0.04)",
             color:canEnd&&!animating?"#fff":"#2a1808",border:canEnd&&!animating?"1px solid rgba(220,140,40,0.5)":"none",
             borderRadius:8,padding:"12px 28px",fontSize:13,fontWeight:900,
-            cursor:canEnd&&!animating?"pointer":"default",fontFamily:"Georgia,serif",letterSpacing:1,
+            cursor:canEnd&&!animating?"pointer":animating?"not-allowed":"default",fontFamily:"Georgia,serif",letterSpacing:1,
             boxShadow:canEnd&&!animating?"0 0 28px rgba(210,130,20,0.55),0 2px 8px rgba(0,0,0,0.5)":"none",
             transition:"all 0.2s"}}>
-            {loading?"⏳ ЖДЁМ…":animating?"⚡ АНИМАЦИЯ…":"ЗАВЕРШИТЬ ХОД ▶"}
+            {loading?"⏳ ДЕРЖИМ…":animating?"⚡ АНИМАЦИЯ…":"В БОЙ ▶"}
           </button>
         </div>
 
@@ -1665,7 +1691,7 @@ export default function App(){
             <div style={{display:"flex",gap:28,alignItems:"center",justifyContent:"center",marginBottom:24,flexWrap:"wrap"}}>
               {/* Alex's card — shown face-up immediately */}
               <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-                <div style={{fontSize:10,color:"#3a7048",fontFamily:"Georgia,serif",letterSpacing:1}}>АЛЕКС ДАЁТ</div>
+                <div style={{fontSize:10,color:"#3a7048",fontFamily:"Georgia,serif",letterSpacing:1}}>СОЮЗНИК ДАЁТ</div>
                 <div style={{width:100,height:150,borderRadius:8,overflow:"hidden",
                   boxShadow:"0 0 20px rgba(76,175,130,0.4)",position:"relative",
                   background:`linear-gradient(135deg,${CARDS[tradeOffer.type]?.c}22,rgba(0,0,0,0.8))`,
@@ -1756,9 +1782,10 @@ export default function App(){
             boxShadow:"0 0 50px rgba(200,120,20,0.25)",animation:"scaleIn 0.25s cubic-bezier(.15,1.2,.3,1)"}}
             onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <span style={{fontSize:14,fontWeight:900,letterSpacing:3,color:"#c8901c",fontFamily:"Georgia,serif"}}>
-                🃏 КАРТЫ В РУКЕ
-              </span>
+              <div>
+                <div style={{fontSize:14,fontWeight:900,letterSpacing:3,color:"#c8901c",fontFamily:"Georgia,serif"}}>🃏 ТВОЯ РУКА</div>
+                <div style={{fontSize:10,color:"#6a5030",fontFamily:"Georgia,serif"}}>В руке: {hand.length} / 5</div>
+              </div>
               <button onClick={()=>setShowDeckPopup(false)}
                 style={{background:"transparent",border:"none",color:"#6a5030",fontSize:18,cursor:"pointer",
                   fontFamily:"Georgia,serif",lineHeight:1,padding:"0 4px"}}>✕</button>
@@ -1803,9 +1830,9 @@ export default function App(){
             border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"36px 48px",textAlign:"center",
             boxShadow:"0 0 60px rgba(200,120,20,0.3)",maxWidth:820}}>
             <div style={{fontSize:22,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
-              color:"#c8901c",marginBottom:6}}>СТАРТОВАЯ РУКА</div>
+              color:"#c8901c",marginBottom:6}}>ЖРЕБИЙ БРОШЕН</div>
             <div style={{fontSize:12,color:"#6a5030",marginBottom:22,fontFamily:"Georgia,serif"}}>
-              Выберите до 2 карт для замены
+              Выбери до двух грамот для замены — иль ступай с тем, что есть
             </div>
             <div style={{display:"flex",gap:14,justifyContent:"center",marginBottom:18,flexWrap:"wrap"}}>
               {hand.map(card=>{
@@ -1841,7 +1868,7 @@ export default function App(){
             }} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
               border:"none",borderRadius:8,padding:"14px 44px",fontSize:13,fontWeight:700,letterSpacing:2,
               cursor:"pointer",fontFamily:"Georgia,serif",boxShadow:"0 0 30px rgba(200,120,20,0.4)"}}>
-              НАЧАТЬ БОЙ ▶
+              В СЕЧУ ▶
             </button>
           </div>
         </div>)}
@@ -1854,9 +1881,9 @@ export default function App(){
             border:"1px solid rgba(200,160,80,0.3)",borderRadius:16,padding:"36px 48px",textAlign:"center",
             boxShadow:"0 0 50px rgba(200,120,20,0.3)",maxWidth:640}}>
             <div style={{fontSize:18,fontWeight:900,letterSpacing:3,fontFamily:"Georgia,serif",
-              color:"#e09a3c",marginBottom:8}}>ПЕРЕПОЛНЕНИЕ РУКИ</div>
+              color:"#e09a3c",marginBottom:8}}>СУМА ПОЛНА</div>
             <div style={{fontSize:12,color:"#6a5030",marginBottom:6,fontFamily:"Georgia,serif"}}>
-              Рука полна (5 карт). Новая карта:
+              В суме нет места. Новая грамота:
             </div>
             <div style={{display:"inline-block",border:"2px solid #c8901c",borderRadius:8,
               padding:"10px 16px",background:"rgba(200,144,28,0.1)",marginBottom:16}}>
@@ -1866,7 +1893,7 @@ export default function App(){
               </div>
             </div>
             <div style={{fontSize:11,color:"#8a7050",marginBottom:6,fontFamily:"Georgia,serif"}}>
-              Выбери карту из руки для сброса (−2 ОД следующего хода):
+              Брось одну грамоту — иль потеряешь два удара в следующей сечи:
             </div>
             <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
               {hand.map(card=>{
@@ -1891,7 +1918,7 @@ export default function App(){
             }} style={{background:"rgba(255,255,255,0.06)",color:"#6a5030",
               border:"1px solid rgba(200,160,80,0.2)",borderRadius:6,padding:"8px 20px",
               fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-              Сбросить новую карту (−1 ОД)
+              Отвергнуть новую (−1 удар)
             </button>
           </div>
         </div>)}
@@ -1941,8 +1968,8 @@ export default function App(){
             borderRadius:12,padding:"40px",maxWidth:480,width:"90%",textAlign:"center",
             color:"#e8d5a0",fontFamily:"Georgia,serif",animation:"scaleIn 0.3s cubic-bezier(.15,1.2,.3,1)",
             boxShadow:"0 0 80px rgba(200,140,20,0.3)"}}>
-            <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#c8901c",marginBottom:6}}>КАК ТЕБЯ ЗОВУТ?</div>
-            <div style={{fontSize:12,color:"#6a5030",marginBottom:24}}>Введи имя и загрузи фото</div>
+            <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#c8901c",marginBottom:6}}>НАЗОВИ СЕБЯ, ВОИН</div>
+            <div style={{fontSize:12,color:"#6a5030",marginBottom:24}}>Имя твоё да образ — пред дружиной</div>
             {/* Hidden file input */}
             <input ref={setupFileRef} type="file" accept="image/*" style={{display:"none"}}
               onChange={e=>{
@@ -1990,7 +2017,7 @@ export default function App(){
                 fontFamily:"Georgia,serif",
                 boxShadow:setupName.trim()?"0 0 30px rgba(200,120,20,0.5)":"none",
                 transition:"all 0.2s"}}>
-              ВОЙТИ В БОЙ →
+              ВСТАТЬ В СТРОЙ →
             </button>
           </div>
         </div>
@@ -2006,7 +2033,7 @@ export default function App(){
             <div style={{fontSize:26,fontWeight:900,letterSpacing:4,fontFamily:"Georgia,serif",
               color:winner==="player"?"#4caf82":"#e05252",marginBottom:12,
               textShadow:`0 0 30px ${winner==="player"?"rgba(76,175,130,0.6)":"rgba(224,82,82,0.6)"}`}}>
-              {winner==="player"?"ПОБЕДА":"ПОРАЖЕНИЕ"}</div>
+              {winner==="player"?"СЛАВА ДРУЖИНЕ":"ДРУЖИНА ПАЛА"}</div>
             <div style={{fontSize:12,color:"#4a3010",marginBottom:8,fontFamily:"Georgia,serif"}}>Ход {turn}</div>
             <div style={{display:"flex",gap:24,justifyContent:"center",marginBottom:18}}>
               <div style={{fontSize:12,color:"#8a7050",fontFamily:"Georgia,serif"}}>
@@ -2014,7 +2041,7 @@ export default function App(){
               </div>
             </div>
             <div style={{fontSize:13,color:"#8a7050",marginBottom:34,lineHeight:1.8,fontFamily:"Georgia,serif"}}>
-              {winner==="player"?"Команда сработала. Отличная работа.":"Используй ловушки и контрудары."}</div>
+              {winner==="player"?"Дружина не подвела. Добрая служба.":"Расставляй ловушки да держи контрудар наготове."}</div>
             <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
               <button onClick={restart} style={{background:"linear-gradient(135deg,#7a4008,#c87820)",color:"#fff",
                 border:"none",borderRadius:8,padding:"12px 36px",fontSize:12,fontWeight:700,letterSpacing:2,
